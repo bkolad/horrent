@@ -7,6 +7,7 @@ import qualified BencodeParser as BP (BEncode, annouce, infoHash, parseFromFile,
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
+import qualified UrlEncoder as Encoder (urlEncodeVars)
 import Data.Binary.Get
 import Data.Word
 import Data.Either
@@ -26,12 +27,6 @@ import Data.Bits  ( (.&.), (.|.), shiftL, shiftR )
 import Data.ByteString.Base16 (encode)
 
 
-import Network.URI
-   ( URI(URI, uriScheme, uriAuthority, uriPath)
-   , URIAuth(uriUserInfo, uriRegName, uriPort)
-   , parseURIReference
-   , unEscapeString, escapeURIString, isUnescapedInURI
-   )
 
 
 type ErrorIO = ErrorT String IO
@@ -49,14 +44,14 @@ trackerUrl :: BP.BEncode -> Either String String
 trackerUrl fromDic = do ann <- BP.annouce fromDic
                         vars <- encodedVars <$> (BP.infoHash fromDic)
                         return $ ann++"?"++vars
-     where encodedVars hash = urlEncodeVars [("info_hash", hash),
-                                             ("peer_id", P.myId),
-                                             ("left", "1000000000"),
-                                             ("port", "6881"),
-                                             ("compact", "1"),
-                                             ("uploaded", "0"),
-                                             ("downloaded", "0"),
-                                             ("event", "started")]         
+     where encodedVars hash = Encoder.urlEncodeVars [("info_hash", hash),
+                                                     ("peer_id", P.myId),
+                                                     ("left", "1000000000"),
+                                                     ("port", "6881"),
+                                                     ("compact", "1"),
+                                                     ("uploaded", "0"),
+                                                     ("downloaded", "0"),
+                                                     ("event", "started")]         
 
                  
 getIPandPort :: BC.ByteString -> [(Word32, Word16)]                                                                                                        
