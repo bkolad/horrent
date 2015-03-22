@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse #-}
 module Peer (Peer, makePeer, myId, talk) where
 
 import qualified Data.ByteString as B
