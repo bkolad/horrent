@@ -65,6 +65,7 @@ lenAndIdToMsg lenId = case lenId of
                     
 lenAndIdToMsg_M lenId_M = lenAndIdToMsg <$> lenId_M              
  
+ 
 -- TODO make Peer showable 
 data Peer = Peer{ handleP :: Handle
                 , peerP :: String 
