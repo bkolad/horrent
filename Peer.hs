@@ -13,11 +13,11 @@ import System.IO
 import Data.Binary.Put
 import Control.Applicative
 import Control.Concurrent
+import Data.IORef
 
 
 myId = "-TR2840-d0p22uiake0b" 
 protocol = "BitTorrent protocol"
-
 
 data Message = KeepAlive 
              | Choke
@@ -64,32 +64,42 @@ lenAndIdToMsg lenId = case lenId of
                         
                     
 lenAndIdToMsg_M lenId_M = lenAndIdToMsg <$> lenId_M              
-             
+ 
+-- TODO make Peer showable 
 data Peer = Peer{ handleP :: Handle
                 , peerP :: String 
-                , amIInterested :: Bool
-                , theyInterested :: Bool
-                , amIChocked :: Bool
-                , theyChocked :: Bool
-                } deriving (Show)
+                , amIInterested :: IORef Bool -- false
+                , amIChocked :: IORef Bool  -- true
+                , amIVirgin :: IORef Bool -- first time I am talking to a peer
+                } --deriving (Show)
                              
 
 talk :: Peer -> IO ()
 talk peer =  E.catch (talkToPeer peer) (\(e::E.SomeException) -> print $ "Failure "++(peerP peer) ++(show e) {-- TODO close the connection--} )
 
-
+canTalToPeer peer = do isVirgin <- readIORef (amIVirgin peer)    
+                       isInterested <-readIORef (amIInterested peer)                     
+                       isIChocked <- readIORef (amIChocked peer)
+                       return $  isVirgin || (isIChocked && isInterested)
+              
+              
 talkToPeer :: Peer -> IO ()
-talkToPeer peer = do let handle = handleP peer
-                     lenAndId <- getMessage handle
-                     let msg = lenAndIdToMsg_M lenAndId
-                     case msg of
-                          Just KeepAlive -> loopAndWait peer "Alive"
-                          Just UnChoke   -> print "UnCHocked"
-                          Just Bitfield  -> (sendMsg handle Interested) >> loopAndWait peer "BBBBBB"
-                          _-> loopAndWait peer (show msg)
-                          where 
-                            loopAndWait peer m  =  (threadDelay 100000) >> (print m)>>talkToPeer peer 
-                     
+talkToPeer peer = do canTalk <- canTalToPeer peer 
+                     if (canTalk) then do
+                        let handle = handleP peer
+                        lenAndId <- getMessage handle
+                        let msg = lenAndIdToMsg_M lenAndId
+                        case msg of
+                              Just KeepAlive -> loopAndWait peer "Alive"
+                              Just UnChoke   -> modifyIORef' (amIVirgin peer) (\_->False) >> (print "UNCHOKED")
+                              Just Bitfield  -> modifyIORef' (amIInterested peer) (\_->True) 
+                                                >> (sendMsg handle Interested)
+                                                >> (talkToPeer peer)
+                              _-> loopAndWait peer (show msg)
+                     else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                     where 
+                        loopAndWait peer m  =  (threadDelay 10000) >> (print m)>>talkToPeer peer
+                        
 
                      
 sendMsg :: Handle -> Message -> IO ()
@@ -102,7 +112,7 @@ sendMsg handle msg = case (msgToLenAndId msg) of
           
 getMessage :: Handle -> IO (Maybe (Int, MessageId))
 getMessage handle = do numBytes <- BL.hGet handle 4
-                       if (BL.length numBytes) < 4 then (threadDelay 10000000)>> (hFlush handle) >> getMessage handle 
+                       if (BL.length numBytes) < 4 then return Nothing  
                        else 
                           do let sizeOfTheBody = (readBEInt numBytes)
                              case sizeOfTheBody of
@@ -141,7 +151,10 @@ recvHandshake handle = do
                           rsrv <- B.hGet handle 8
                           hash <- B.hGet handle 20
                           peer <- B.hGet handle 20 
-                          return $ Peer handle (BC.unpack peer) True False True True
+                          amIVirgin <- newIORef True
+                          amIChocked <- newIORef True
+                          amIInterested <- newIORef False
+                          return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin
 
                           
 intFromBS :: BC.ByteString -> Int  

@@ -82,7 +82,7 @@ showResponse = do content <-  liftIO $ BP.parseFromFile "ubuntu.torrent"
                   let ls =  getIPandPort peersBS
                   peers <- liftIO $ mapConcurrently (\(h,p)->  makePeer hash (show h) (fromIntegral p)) (take 5 ls) 
                   let ls@(_, pp) = partitionEithers peers  
-                  liftIO $ print ls
+                --  liftIO $ print ls
                   liftIO $ mapConcurrently P.talk pp
                   return $ ls
                   
