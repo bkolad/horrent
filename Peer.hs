@@ -65,7 +65,6 @@ lenAndIdToMsg lenId = case lenId of
                     
 lenAndIdToMsg_M lenId_M = lenAndIdToMsg <$> lenId_M              
  
- 
 -- TODO make Peer showable 
 data Peer = Peer{ handleP :: Handle
                 , peerP :: String 
@@ -76,7 +75,7 @@ data Peer = Peer{ handleP :: Handle
                              
 
 talk :: Peer -> IO ()
-talk peer =  E.catch (talkToPeer peer) (\(e::E.SomeException) -> print $ "Failure "++(peerP peer) ++(show e) {-- TODO close the connection--} )
+talk peer =  E.catch (talkToPeer peer) (\(e::E.SomeException) -> print $ "Failure "++(peerP peer) ++(show e) {-- TODO close the connection-} )
 
 canTalToPeer peer = do isVirgin <- readIORef (amIVirgin peer)    
                        isInterested <-readIORef (amIInterested peer)                     
