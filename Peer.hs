@@ -1,5 +1,5 @@
-{-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse #-}
-module Peer (Peer, makePeer, myId, talk) where
+{-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse, FlexibleInstances, UndecidableInstances #-}
+module Peer (Peer, makePeer, myId, talk, showPeer) where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -26,7 +26,7 @@ data Message = KeepAlive
              | Interested
              | NotInterested
              | Have
-             | Bitfield
+             | Bitfield B.ByteString
              | Request
              | Piece
              | Cancel
@@ -44,34 +44,41 @@ msgToLenAndId msg = case msg of
                          Interested    -> (1, Id 2)
                          NotInterested -> (1, Id 3)
                          Have          -> (5, Id 4)
-                         Bitfield      -> undefined
+                         Bitfield _    -> undefined
                          Request       -> (13, Id 6)
                          Piece         -> undefined
                          Cancel        -> (13, Id 8)
                          Port          -> (3, Id 9)
-                        
+
+lenAndIdToMsg :: (Int, MessageId, B.ByteString) -> Message 
 lenAndIdToMsg lenId = case lenId of
-                          (0, NoId)   -> KeepAlive
-                          (1, Id 0)   -> Choke
-                          (1, Id 1)   -> UnChoke
-                          (1, Id 2)   -> Interested
-                          (1, Id 3)   -> NotInterested
-                          (5, Id 4)   -> Have
-                          (len, Id 5) -> Bitfield
-                          (13, Id 6)  -> Request
-                          (len, Id 7) -> Piece 
-                          (13, Id 8)  -> Cancel
-                          (3, Id 9)   -> Port
+                          (0, NoId, _)   -> KeepAlive
+                          (1, Id 0, bs)   -> Choke
+                          (1, Id 1, bs)   -> UnChoke
+                          (1, Id 2, bs)   -> Interested
+                          (1, Id 3, bs)   -> NotInterested
+                          (5, Id 4, bs)   -> Have
+                          (len, Id 5, bf) -> Bitfield bf
+                          (13, Id 6, bs)  -> Request
+                          (len, Id 7, bs) -> Piece 
+                          (13, Id 8, bs)  -> Cancel
+                          (3, Id 9, bs)   -> Port
                         
  
--- TODO make Peer showable 
 data Peer = Peer{ handleP :: Handle
                 , peerP :: String 
                 , amIInterested :: IORef Bool -- false
                 , amIChocked :: IORef Bool  -- true
                 , amIVirgin :: IORef Bool -- first time I am talking to a peer
-                } --deriving (Show)
-                             
+                , bitField :: IORef B.ByteString
+                } 
+                       
+
+showPeer :: Peer -> IO (String, B.ByteString)                       
+showPeer p= do let name = peerP p
+               bf <- readIORef $ bitField p    
+               return (name, bf)
+   
 
 talk :: Peer -> IO ()
 talk peer =  E.catch (talkToPeer peer) (\(e::E.SomeException) -> print $ "Failure "++(peerP peer) ++(show e) {-- TODO close the connection-} )
@@ -89,11 +96,12 @@ talkToPeer peer = do canTalk <- canTalToPeer peer
                         lenAndId <- getMessage handle
                         let msg = liftM lenAndIdToMsg lenAndId
                         case msg of
-                              Just KeepAlive -> loopAndWait peer "Alive"
-                              Just UnChoke   -> modifyIORef' (amIVirgin peer) (\_->False) >> (print "UNCHOKED")
-                              Just Bitfield  -> modifyIORef' (amIInterested peer) (\_->True) 
-                                                >> (sendMsg handle Interested)
-                                                >> (talkToPeer peer)
+                              Just KeepAlive     -> loopAndWait peer "Alive"
+                              Just UnChoke       -> modifyIORef' (amIVirgin peer) (\_->False) >> (print "UNCHOKED")
+                              Just (Bitfield bf) -> modifyIORef' (amIInterested peer) (\_->True) 
+                                                    >> modifyIORef' (bitField peer) (\_->bf)
+                                                    >> (sendMsg handle Interested)
+                                                    >> (talkToPeer peer)
                               _-> loopAndWait peer (show msg)
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
                      where 
@@ -109,17 +117,17 @@ sendMsg handle msg = case (msgToLenAndId msg) of
                             send = BL.hPutStr handle . runPut  
           
           
-getMessage :: Handle -> IO (Maybe (Int, MessageId))
+getMessage :: Handle -> IO (Maybe (Int, MessageId, B.ByteString))
 getMessage handle = do numBytes <- BL.hGet handle 4
                        if (BL.length numBytes) < 4 then return Nothing  
                        else 
                           do let sizeOfTheBody = (readBEInt numBytes)
                              case sizeOfTheBody of
-                                  0 -> return $ Just (0, NoId) 
+                                  0 -> return $ Just (0, NoId, B.empty) 
                                   otherwise -> --(Just . swap)<$>(getMsg handle sizeOfTheBody) 
                                               do 
                                                  (msgId, body) <- getMsg handle sizeOfTheBody 
-                                                 return $ Just  (sizeOfTheBody, msgId)
+                                                 return $ Just  (sizeOfTheBody, msgId, body)
                              where  
                                getMsg handle size = (,)<$>(Id . intFromBS <$> B.hGet handle 1)<*> (B.hGet handle (size -1))
                                readBEInt = fromIntegral  . runGet getWord32be                            
@@ -153,7 +161,9 @@ recvHandshake handle = do
                           amIVirgin <- newIORef True
                           amIChocked <- newIORef True
                           amIInterested <- newIORef False
-                          return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin
+                          byteField <-  newIORef B.empty
+                          
+                          return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin byteField
 
                           
 intFromBS :: BC.ByteString -> Int  

@@ -2,7 +2,7 @@
 
 module Connector where
 
-import qualified Peer as P (Peer, makePeer, myId, talk) 
+import qualified Peer as P (Peer, makePeer, myId, talk, showPeer) 
 import qualified BencodeParser as BP (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -81,10 +81,11 @@ showResponse = do content <-  liftIO $ BP.parseFromFile "ubuntu.torrent"
                   peersBS <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
                   let ls =  getIPandPort peersBS
                   peers <- liftIO $ mapConcurrently (\(h,p)->  makePeer hash (show h) (fromIntegral p)) (take 5 ls) 
-                  let ls@(_, pp) = partitionEithers peers  
-                --  liftIO $ print ls
+                  let (_, pp) = partitionEithers peers  
                   liftIO $ mapConcurrently P.talk pp
-                  return $ ls
+                  liftIO $ mapM P.showPeer pp
+              
+            --      return $ ls
                   
 toIO = runErrorT showResponse
 
