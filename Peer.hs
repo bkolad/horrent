@@ -13,6 +13,7 @@ import System.IO
 import Data.Binary.Put
 import Control.Applicative
 import Control.Concurrent
+import Control.Monad
 import Data.IORef
 
 
@@ -62,8 +63,6 @@ lenAndIdToMsg lenId = case lenId of
                           (13, Id 8)  -> Cancel
                           (3, Id 9)   -> Port
                         
-                    
-lenAndIdToMsg_M lenId_M = lenAndIdToMsg <$> lenId_M              
  
 -- TODO make Peer showable 
 data Peer = Peer{ handleP :: Handle
@@ -88,7 +87,7 @@ talkToPeer peer = do canTalk <- canTalToPeer peer
                      if (canTalk) then do
                         let handle = handleP peer
                         lenAndId <- getMessage handle
-                        let msg = lenAndIdToMsg_M lenAndId
+                        let msg = liftM lenAndIdToMsg lenAndId
                         case msg of
                               Just KeepAlive -> loopAndWait peer "Alive"
                               Just UnChoke   -> modifyIORef' (amIVirgin peer) (\_->False) >> (print "UNCHOKED")
