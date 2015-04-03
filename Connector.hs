@@ -31,7 +31,10 @@ makePeers tracker numberOfP = do content <-  liftIO $ BP.parseFromFile tracker
                                  peersBS <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
                                  let ls =  getIPandPort peersBS
                                  peers <- liftIO $ Async.mapConcurrently (\(h,p)->  makePeer hash (show h) (fromIntegral p)) (take numberOfP ls) 
-                                 let (_, pp) = DE.partitionEithers peers  
+                                 let (ll, pp) = DE.partitionEithers peers
+                                 case ll of
+                                      [] -> return []
+                                      _ -> liftIO $ (:)<$>(print "ERROR ") <*> (mapM print ll)   
                                  return pp
                                  
 
