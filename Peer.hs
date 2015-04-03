@@ -58,8 +58,7 @@ recvHandshake handle = do
                           amIVirgin <- newIORef True
                           amIChocked <- newIORef True
                           amIInterested <- newIORef False
-                          byteField <-  newIORef B.empty
-                          
+                          byteField <-  newIORef B.empty                   
                           return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin byteField
 
                           

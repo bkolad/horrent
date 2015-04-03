@@ -2,7 +2,7 @@
 
 module PeersControler (start) where
 
-import qualified Connector as C (getPeers) 
+import qualified Connector as C (liftEither, makePeers) 
 import qualified Peer as P
 import Control.Concurrent.Async as Async (mapConcurrently)
 
@@ -16,6 +16,7 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Monad
 import Data.IORef
+import Control.Monad.Error
 
 data Message = KeepAlive 
              | Choke
@@ -63,23 +64,16 @@ lenAndIdToMsg lenId = case lenId of
                         
 
 
-start tracker n= do peers <- C.getPeers tracker n 
-                    case peers of
-                      --  Left _ -> return
-                         Right ls -> Async.mapConcurrently talk ls
+start :: String -> Int -> ErrorT String IO [P.Peer]                     
+start tracker n= do peers <- C.makePeers tracker n 
+                    liftIO $ Async.mapConcurrently talk peers
                     return peers
                   
 
 talk :: P.Peer -> IO ()
 talk peer =  E.catch (talkToPeer peer) (\(e::E.SomeException) -> print $ "Failure "++(P.peerP peer) ++(show e) {-- TODO close the connection-} )
 
-
-canTalToPeer peer = do isVirgin <- readIORef (P.amIVirgin peer)    
-                       isInterested <-readIORef (P.amIInterested peer)                     
-                       isIChocked <- readIORef (P.amIChocked peer)
-                       return $  isVirgin || (isIChocked && isInterested)
-              
-              
+                            
 talkToPeer :: P.Peer -> IO ()
 talkToPeer peer = do canTalk <- canTalToPeer peer 
                      if (canTalk) then do
@@ -96,18 +90,9 @@ talkToPeer peer = do canTalk <- canTalToPeer peer
                               _-> loopAndWait peer (show msg)
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
                      where 
-                        loopAndWait peer m  =  (threadDelay 10000) >> (print m)>>talkToPeer peer
-                        
+                        loopAndWait peer m  =  (threadDelay 1000000) >> (print m)>>talkToPeer peer
 
-                     
-sendMsg :: SIO.Handle -> Message -> IO ()
-sendMsg handle msg = case (msgToLenAndId msg) of
-                          (x, NoId) -> send $ putWord32be x
-                          (x, Id y) -> send $ putWord32be x >> putWord8 (fromIntegral y)
-                          where 
-                            send = BL.hPutStr handle . runPut  
-          
-          
+                        
 getMessage :: SIO.Handle -> IO (Maybe (Int, MessageId, B.ByteString))
 getMessage handle = do numBytes <- BL.hGet handle 4
                        if (BL.length numBytes) < 4 then return Nothing  
@@ -121,4 +106,21 @@ getMessage handle = do numBytes <- BL.hGet handle 4
                                                  return $ Just  (sizeOfTheBody, msgId, body)
                              where  
                                getMsg handle size = (,)<$>(Id . P.intFromBS <$> B.hGet handle 1)<*> (B.hGet handle (size -1))
-                               readBEInt = fromIntegral  . runGet getWord32be      
+                               readBEInt = fromIntegral  . runGet getWord32be                              
+       
+       
+canTalToPeer :: P.Peer -> IO Bool
+canTalToPeer peer = do isVirgin <- readIORef (P.amIVirgin peer)    
+                       isInterested <-readIORef (P.amIInterested peer)                     
+                       isIChocked <- readIORef (P.amIChocked peer)
+                       return $  isVirgin || (isIChocked && isInterested)
+                        
+                  
+sendMsg :: SIO.Handle -> Message -> IO ()
+sendMsg handle msg = case (msgToLenAndId msg) of
+                          (x, NoId) -> send $ putWord32be x
+                          (x, Id y) -> send $ putWord32be x >> putWord8 (fromIntegral y)
+                          where 
+                            send = BL.hPutStr handle . runPut  
+          
+          
