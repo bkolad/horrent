@@ -16,7 +16,7 @@ import Control.Monad.Error
 data BStringT = BString BC.ByteString deriving (Eq, Show)
 
 data BEncode = BStr BStringT
-             | BInt Integer
+             | BInt Int
              | BList [BEncode]
              | BDic [(BStringT, BEncode)]
              deriving (Eq, Show) 
@@ -29,12 +29,12 @@ annouce inDic =  BC.unpack <$> ((find "announce" inDic) >>= getBStr)
 peers :: BEncode -> Either String BC.ByteString       
 peers inDic =  ((find "peers" inDic) >>= getBStr)
 
-piceSize :: BEncode ->Either String Integer
+piceSize :: BEncode ->Either String Int
 piceSize inDic = do  infoDic <- find "info" inDic
                      (BInt len) <- find "piece length" infoDic
                      return len 
 
-torrentSize :: BEncode ->Either String Integer
+torrentSize :: BEncode ->Either String Int
 torrentSize inDic = do infoDic <- find "info" inDic
                        (BInt len) <- find "length" infoDic
                        return len 

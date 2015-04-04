@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse, FlexibleInstances, UndecidableInstances #-}
+{-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse, FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
 
 module PeersControler (start) where
 
@@ -9,14 +9,16 @@ import Control.Concurrent.Async as Async (mapConcurrently)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Control.Exception as E
-import Data.Binary.Get
+import qualified Data.Bits as Bits
 import qualified System.IO as SIO
+import Data.Binary.Get
 import Data.Binary.Put
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
 import Data.IORef
 import Control.Monad.Error
+import Data.Array.IO
 
 data Message = KeepAlive 
              | Choke
@@ -29,10 +31,10 @@ data Message = KeepAlive
              | Piece
              | Cancel
              | Port 
-             | Error
+             | Error Int MessageId
              deriving (Show)
              
-data MessageId = NoId | Id Int             
+data MessageId = NoId | Id Int deriving (Show)     
 
 
 msgToLenAndId msg = case msg of
@@ -47,6 +49,7 @@ msgToLenAndId msg = case msg of
                          Piece         -> undefined
                          Cancel        -> (13, Id 8)
                          Port          -> (3, Id 9)
+                         Error _ _     -> undefined --(99, Id 99)
 
 lenAndIdToMsg :: (Int, MessageId, B.ByteString) -> Message 
 lenAndIdToMsg lenId = case lenId of
@@ -61,6 +64,7 @@ lenAndIdToMsg lenId = case lenId of
                           (len, Id 7, bs) -> Piece 
                           (13, Id 8, bs)  -> Cancel
                           (3, Id 9, bs)   -> Port
+                          (i, iD, _)      -> Error i iD
                         
 
 
@@ -84,14 +88,14 @@ talkToPeer peer = do canTalk <- canTalToPeer peer
                               Just KeepAlive     -> loopAndWait peer "Alive"
                               Just UnChoke       -> modifyIORef' (P.amIVirgin peer) (\_->False) >> (print "UNCHOKED")
                               Just (Bitfield bf) -> modifyIORef' (P.amIInterested peer) (\_->True) 
-                                                    >> modifyIORef' (P.bitField peer) (\_->bf)
+                                                    >> updateArray  (P.bitFieldArray peer) bf
                                                     >> (sendMsg handle Interested)
                                                     >> (talkToPeer peer)
                           --    Just (Have pId)   ->                      
                               _-> loopAndWait peer (show msg)
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
                      where 
-                        loopAndWait peer m  =  (threadDelay 1000000) >> (print m)>>talkToPeer peer
+                        loopAndWait peer m  =  (threadDelay 10000) >> (print m)>>talkToPeer peer
 
                         
 getMessage :: SIO.Handle -> IO (Maybe (Int, MessageId, B.ByteString))
@@ -123,5 +127,20 @@ sendMsg handle msg = case (msgToLenAndId msg) of
                           (x, Id y) -> send $ putWord32be x >> putWord8 (fromIntegral y)
                           where 
                             send = BL.hPutStr handle . runPut  
+   
+   
+updateArray :: IOArray Int Bool -> B.ByteString -> IO ()   
+updateArray arr bs = update arr (convert bs) 0   
+
+
+update :: IOArray Int Bool -> [Bool] -> Int -> IO ()
+update arr [] _ = return ()
+update arr (x:xs) i = do (lo, hi) <- getBounds arr
+                         if (lo>=i && hi<=i) then
+                            (writeArray arr i x) >> update arr xs (i+1)
+                         else
+                            return ()
+                          
+convert bs = [Bits.testBit w i| w<-B.unpack bs, i<-[7,6.. 0]]
           
           

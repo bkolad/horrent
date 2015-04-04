@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse, FlexibleInstances, UndecidableInstances #-}
-module Peer (Peer, makePeer, myId, showPeer, intFromBS, peerP, handleP, amIInterested, amIChocked, amIVirgin, bitField) where
+module Peer (Peer, makePeer, myId, showPeer, intFromBS, peerP, handleP, amIInterested, amIChocked, amIVirgin, bitFieldArray) where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -21,15 +21,14 @@ data Peer = Peer{ handleP :: SIO.Handle
                 , amIInterested :: IORef Bool -- false
                 , amIChocked :: IORef Bool  -- true
                 , amIVirgin :: IORef Bool -- first time I am talking to a peer
-                , bitField :: IORef B.ByteString
                 , bitFieldArray :: IOArray Int Bool
                 } 
                        
 
-showPeer :: Peer -> IO (String, B.ByteString)                       
+--showPeer :: Peer -> IO String                  
 showPeer p= do let name = peerP p
-               bf <- readIORef $ bitField p    
-               return (name, bf)
+             --  arr <-getElems (bitFieldArray p)    
+               return name--(name, arr)
                          
 
                  
@@ -59,11 +58,10 @@ recvHandshake handle size = do len <- B.hGet handle 1
                                amIVirgin <- newIORef True
                                amIChocked <- newIORef True
                                amIInterested <- newIORef False
-                               byteField <-  newIORef B.empty                   
-                               bfArr <- makeBFArray 10
-                               return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin byteField bfArr
+                               bfArr <- makeBFArray size
+                               return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin bfArr
 
-makeBFArray size = newArray (1,size) False :: IO (IOArray Int Bool)
+makeBFArray size = newArray (0,size-1) False :: IO (IOArray Int Bool)
                                   
 intFromBS :: BC.ByteString -> Int  
 intFromBS = fromIntegral . head . B.unpack
