@@ -9,6 +9,7 @@ import Control.Concurrent.Async as Async (mapConcurrently)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Control.Exception as E
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.Bits as Bits
 import qualified System.IO as SIO
 import Data.Binary.Get
@@ -25,7 +26,7 @@ data Message = KeepAlive
              | UnChoke
              | Interested
              | NotInterested
-             | Have Int
+             | Have (Int, B.ByteString)
              | Bitfield B.ByteString
              | Request
              | Piece
@@ -58,7 +59,7 @@ lenAndIdToMsg lenId = case lenId of
                           (1, Id 1, bs)   -> UnChoke
                           (1, Id 2, bs)   -> Interested
                           (1, Id 3, bs)   -> NotInterested
-                          (5, Id 4, pId)  -> Have $ P.intFromBS pId
+                          (5, Id 4, pId)  -> Have (P.intFromBS pId, pId)
                           (len, Id 5, bf) -> Bitfield bf
                           (13, Id 6, bs)  -> Request
                           (len, Id 7, bs) -> Piece 
@@ -85,17 +86,18 @@ talkToPeer peer = do canTalk <- canTalToPeer peer
                         lenAndId <- getMessage handle
                         let msg = liftM lenAndIdToMsg lenAndId
                         case msg of
-                              Just KeepAlive     -> loopAndWait peer "Alive"
+                              Just KeepAlive     -> loopAndWait peer "Alive" 100000
                               Just UnChoke       -> modifyIORef' (P.amIVirgin peer) (\_->False) >> (print "UNCHOKED")
                               Just (Bitfield bf) -> modifyIORef' (P.amIInterested peer) (\_->True) 
                                                     >> updateArray  (P.bitFieldArray peer) bf
                                                     >> (sendMsg handle Interested)
-                                                    >> (talkToPeer peer)
-                          --    Just (Have pId)   ->                      
-                              _-> loopAndWait peer (show msg)
+                                                    >> print "Got BF"--(talkToPeer peer)
+                              Just (Have (pId, b))  -> print ((show pId)++" "++(BC.unpack b))    
+                              Nothing -> print "Nothing"--loopAndWait peer "Nothing" 100000000
+                              _-> loopAndWait peer (show msg) 10000
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
                      where 
-                        loopAndWait peer m  =  (threadDelay 10000) >> (print m)>>talkToPeer peer
+                        loopAndWait peer m p=  (threadDelay p) >> (print m)>>talkToPeer peer
 
                         
 getMessage :: SIO.Handle -> IO (Maybe (Int, MessageId, B.ByteString))
@@ -130,7 +132,7 @@ sendMsg handle msg = case (msgToLenAndId msg) of
    
    
 updateArray :: IOArray Int Bool -> B.ByteString -> IO ()   
-updateArray arr bs = update arr (convert bs) 0   
+updateArray arr bs = update arr (convertToBits bs) 0   
 
 
 update :: IOArray Int Bool -> [Bool] -> Int -> IO ()
@@ -141,6 +143,8 @@ update arr (x:xs) i = do (lo, hi) <- getBounds arr
                          else
                             return ()
                           
-convert bs = [Bits.testBit w i| w<-B.unpack bs, i<-[7,6.. 0]]
+convertToBits bs = [Bits.testBit w i| w<-B.unpack bs, i<-[7,6.. 0]]
           
+          
+fromBsToInt bs = zipWith Bits.shiftL (reverse $ map fromIntegral (B.unpack bs)) [0,8 ..]          
           
