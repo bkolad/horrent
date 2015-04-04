@@ -23,7 +23,7 @@ data Message = KeepAlive
              | UnChoke
              | Interested
              | NotInterested
-             | Have
+             | Have Int
              | Bitfield B.ByteString
              | Request
              | Piece
@@ -41,7 +41,7 @@ msgToLenAndId msg = case msg of
                          UnChoke       -> (1, Id 1)
                          Interested    -> (1, Id 2)
                          NotInterested -> (1, Id 3)
-                         Have          -> (5, Id 4)
+                         Have _        -> (5, Id 4)
                          Bitfield _    -> undefined
                          Request       -> (13, Id 6)
                          Piece         -> undefined
@@ -55,7 +55,7 @@ lenAndIdToMsg lenId = case lenId of
                           (1, Id 1, bs)   -> UnChoke
                           (1, Id 2, bs)   -> Interested
                           (1, Id 3, bs)   -> NotInterested
-                          (5, Id 4, bs)   -> Have
+                          (5, Id 4, pId)  -> Have $ P.intFromBS pId
                           (len, Id 5, bf) -> Bitfield bf
                           (13, Id 6, bs)  -> Request
                           (len, Id 7, bs) -> Piece 
@@ -87,6 +87,7 @@ talkToPeer peer = do canTalk <- canTalToPeer peer
                                                     >> modifyIORef' (P.bitField peer) (\_->bf)
                                                     >> (sendMsg handle Interested)
                                                     >> (talkToPeer peer)
+                          --    Just (Have pId)   ->                      
                               _-> loopAndWait peer (show msg)
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
                      where 

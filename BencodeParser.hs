@@ -1,4 +1,4 @@
-module BencodeParser (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers) where
+module BencodeParser (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers, piceSize, torrentSize) where
 
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -28,6 +28,17 @@ annouce inDic =  BC.unpack <$> ((find "announce" inDic) >>= getBStr)
 
 peers :: BEncode -> Either String BC.ByteString       
 peers inDic =  ((find "peers" inDic) >>= getBStr)
+
+piceSize :: BEncode ->Either String Integer
+piceSize inDic = do  infoDic <- find "info" inDic
+                     (BInt len) <- find "piece length" infoDic
+                     return len 
+
+torrentSize :: BEncode ->Either String Integer
+torrentSize inDic = do infoDic <- find "info" inDic
+                       (BInt len) <- find "length" infoDic
+                       return len 
+                                         
 
 infoHash :: BEncode -> Either String String
 infoHash inDic = (BC.unpack . SHA1.hash . toByteString) <$> (find "info" inDic) 

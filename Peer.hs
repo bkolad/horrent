@@ -8,6 +8,7 @@ import qualified Control.Exception as E
 import qualified Network as N
 import qualified System.IO as SIO
 import Data.IORef
+import Data.Array.IO
 
 
 myId = "-TR2840-d0p22uiake0b" 
@@ -21,6 +22,7 @@ data Peer = Peer{ handleP :: SIO.Handle
                 , amIChocked :: IORef Bool  -- true
                 , amIVirgin :: IORef Bool -- first time I am talking to a peer
                 , bitField :: IORef B.ByteString
+                , bitFieldArray :: IOArray Int Bool
                 } 
                        
 
@@ -31,14 +33,14 @@ showPeer p= do let name = peerP p
                          
 
                  
-makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> IO Peer             
-makePeer hash host port = do handle<- N.connectTo host (N.PortNumber  port)
-                             SIO.hSetBuffering handle SIO.NoBuffering                            
-                          --   hSetBuffering handle (BlockBuffering Nothing)
-                             --hSetBuffering handle LineBuffering
-                             sendHandshake handle hash $ BC.pack myId
-                             recvHandshake handle                                         
-                               
+makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> Int -> IO Peer             
+makePeer hash host port size = do handle<- N.connectTo host (N.PortNumber  port)
+                                  SIO.hSetBuffering handle SIO.NoBuffering                            
+                                --   hSetBuffering handle (BlockBuffering Nothing)
+                                  --hSetBuffering handle LineBuffering
+                                  sendHandshake handle hash $ BC.pack myId
+                                  recvHandshake handle size                                        
+                                    
              
 sendHandshake :: SIO.Handle -> B.ByteString -> B.ByteString -> IO ()
 sendHandshake handle hash peer = BC.hPutStr handle msg -- >> print "Handshake finished"
@@ -48,20 +50,21 @@ sendHandshake handle hash peer = BC.hPutStr handle msg -- >> print "Handshake fi
               rsrv = B.replicate 8 (fromIntegral 0)       
               
               
-recvHandshake :: SIO.Handle -> IO Peer
-recvHandshake handle = do 
-                          len <- B.hGet handle 1
-                          ptr <- B.hGet handle $ intFromBS len
-                          rsrv <- B.hGet handle 8
-                          hash <- B.hGet handle 20
-                          peer <- B.hGet handle 20 
-                          amIVirgin <- newIORef True
-                          amIChocked <- newIORef True
-                          amIInterested <- newIORef False
-                          byteField <-  newIORef B.empty                   
-                          return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin byteField
+recvHandshake :: SIO.Handle-> Int -> IO Peer
+recvHandshake handle size = do len <- B.hGet handle 1
+                               ptr <- B.hGet handle $ intFromBS len
+                               rsrv <- B.hGet handle 8
+                               hash <- B.hGet handle 20
+                               peer <- B.hGet handle 20 
+                               amIVirgin <- newIORef True
+                               amIChocked <- newIORef True
+                               amIInterested <- newIORef False
+                               byteField <-  newIORef B.empty                   
+                               bfArr <- makeBFArray 10
+                               return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin byteField bfArr
 
-                          
+makeBFArray size = newArray (1,size) False :: IO (IOArray Int Bool)
+                                  
 intFromBS :: BC.ByteString -> Int  
 intFromBS = fromIntegral . head . B.unpack
 

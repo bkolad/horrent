@@ -3,7 +3,7 @@
 module Connector ( liftEither, makePeers) where
 
 import qualified Peer as P (Peer, makePeer, myId, showPeer) 
-import qualified BencodeParser as BP (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers)
+import qualified BencodeParser as BP (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers, piceSize, torrentSize)
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import qualified UrlEncoder as Encoder (urlEncodeVars)
@@ -27,10 +27,14 @@ makePeers :: String ->Int -> ErrorT String IO [P.Peer]
 makePeers tracker numberOfP = do content <-  liftIO $ BP.parseFromFile tracker
                                  hash <- liftEither $ BC.pack<$>(content >>= BP.infoHash)
                                  url <-   liftEither $ content >>= trackerUrl
+                                 pSize <- liftEither $ content >>= BP.piceSize
+                                 tSize <- liftEither $ content >>= BP.torrentSize
+                                 liftIO $ print pSize
+                                 liftIO $ print tSize
                                  resp <- (liftIO . getResponseFromTracker) url
                                  peersBS <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
-                                 let ls =  getIPandPort peersBS
-                                 peers <- liftIO $ Async.mapConcurrently (\(h,p)->  makePeer hash (show h) (fromIntegral p)) (take numberOfP ls) 
+                                 let ls =  getIPandPort peersBS    
+                                 peers <- liftIO $ Async.mapConcurrently (\(h,p)->  makePeer hash (show h) (fromIntegral p) 100) (take numberOfP ls) 
                                  let (ll, pp) = DE.partitionEithers peers
                                  case ll of
                                       [] -> return []
@@ -38,8 +42,8 @@ makePeers tracker numberOfP = do content <-  liftIO $ BP.parseFromFile tracker
                                  return pp
                                  
 
-makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> IO (Either String P.Peer)
-makePeer hash h p  = E.catch (liftM Right $ P.makePeer hash h p)
+makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> Int -> IO (Either String P.Peer)
+makePeer hash h p size = E.catch (liftM Right $ P.makePeer hash h p size)
                              (\(e::SomeException) -> return . Left $ show e )                                 
 
                              
