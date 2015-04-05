@@ -59,7 +59,7 @@ lenAndIdToMsg lenId = case lenId of
                           (1, Id 1, bs)   -> UnChoke
                           (1, Id 2, bs)   -> Interested
                           (1, Id 3, bs)   -> NotInterested
-                          (5, Id 4, pId)  -> Have (P.intFromBS pId, pId)
+                          (5, Id 4, pId)  -> Have (fromBsToInt pId, pId)
                           (len, Id 5, bf) -> Bitfield bf
                           (13, Id 6, bs)  -> Request
                           (len, Id 7, bs) -> Piece 
@@ -91,7 +91,7 @@ talkToPeer peer = do canTalk <- canTalToPeer peer
                               Just (Bitfield bf) -> modifyIORef' (P.amIInterested peer) (\_->True) 
                                                     >> updateArray  (P.bitFieldArray peer) bf
                                                     >> (sendMsg handle Interested)
-                                                    >> print "Got BF"--(talkToPeer peer)
+                                                    >> print "Got BF" >> (talkToPeer peer)
                               Just (Have (pId, b))  -> print ((show pId)++" "++(BC.unpack b))    
                               Nothing -> print "Nothing"--loopAndWait peer "Nothing" 100000000
                               _-> loopAndWait peer (show msg) 10000
@@ -146,5 +146,7 @@ update arr (x:xs) i = do (lo, hi) <- getBounds arr
 convertToBits bs = [Bits.testBit w i| w<-B.unpack bs, i<-[7,6.. 0]]
           
           
-fromBsToInt bs = zipWith Bits.shiftL (reverse $ map fromIntegral (B.unpack bs)) [0,8 ..]          
+fromBsToInt bs = sum $ zipWith (\x y->x*2^y) (reverse ws) [0,8..]
+                 where ws = map fromIntegral (B.unpack bs) 
+                
           
