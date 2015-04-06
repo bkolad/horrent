@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse, FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse, FlexibleInstances, UndecidableInstances, FlexibleContexts, TupleSections #-}
 
 module PeersControler (start) where
 
@@ -102,18 +102,16 @@ talkToPeer peer = do canTalk <- P.canTalkToPeer peer
                         
 getMessage :: SIO.Handle -> IO (Maybe (MsgLen, MessageId, MsgPayload))
 getMessage handle = do numBytes <- BL.hGet handle 4
-                       if (BL.length numBytes) < 4 then return Nothing  
+                       if (BL.length numBytes) < 4 
+                          then return Nothing  
                        else 
-                          do let sizeOfTheBody = (readBEInt numBytes)
-                             case sizeOfTheBody of
-                                  0 -> return $ Just (0, NoId, B.empty) 
-                                  otherwise -> --(Just . swap)<$>(getMsg handle sizeOfTheBody) 
-                                              do 
-                                                 (msgId, body) <- getMsg handle sizeOfTheBody 
-                                                 return $ Just  (sizeOfTheBody, msgId, body)
-                             where  
-                               getMsg handle size = (,)<$>(Id . P.fromBsToInt <$> B.hGet handle 1)<*> (B.hGet handle ((fromIntegral size) -1))
-                               readBEInt = runGet getWord32be                              
+                            Just <$> (getMsg (readBEWord numBytes))
+                     where
+                      getMsg 0 = return (0, NoId, B.empty)
+                      getMsg size = (\iD p->(size, iD, p))<$>(Id . P.fromBsToInt <$> B.hGet handle 1)
+                                                          <*> (B.hGet handle ((fromIntegral size) -1))
+                      readBEWord = runGet getWord32be   
+                               
                                    
                   
 sendMsg :: SIO.Handle -> Message -> IO ()
