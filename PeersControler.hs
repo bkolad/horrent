@@ -33,7 +33,7 @@ data Message = KeepAlive
              | Piece
              | Cancel
              | Port 
-             | Error MsgLen MessageId
+             | Unknown MsgLen MessageId
              deriving (Show)
              
 data MessageId = NoId | Id Int deriving (Show)     
@@ -51,7 +51,7 @@ msgToLenAndId msg = case msg of
                          Piece         -> undefined
                          Cancel        -> (13, Id 8)
                          Port          -> (3, Id 9)
-                         Error _ _     -> undefined --(99, Id 99)
+                         Unknown _ _     -> undefined --(99, Id 99)
 
 lenAndIdToMsg :: (MsgLen, MessageId, MsgPayload) -> Message 
 lenAndIdToMsg lenId = case lenId of
@@ -66,7 +66,7 @@ lenAndIdToMsg lenId = case lenId of
                           (len, Id 7, bs) -> Piece 
                           (13, Id 8, bs)  -> Cancel
                           (3, Id 9, bs)   -> Port
-                          (i, iD, _)      -> Error i iD                                   
+                          (i, iD, _)      -> Unknown i iD                                   
 
                           
 start :: String -> Int -> ErrorT String IO [P.Peer]                     
@@ -87,19 +87,30 @@ talkToPeer peer = do canTalk <- P.canTalkToPeer peer
                         let msg = liftM lenAndIdToMsg lenAndId
                         case msg of
                               Just KeepAlive     -> loopAndWait peer "Alive" 100000
-                              Just UnChoke       -> P.setNotVirgin peer>> (print "UNCHOKED")
-                              Just (Bitfield bf) -> P.updateBF peer bf 
-                                                    >> P.setInterested peer True
-                                                    >> (sendMsg handle Interested)
-                                                    >> print "Got BF" >> (talkToPeer peer)
-                              Just (Have (pId, b))  -> P.updateBFIndex peer pId >> print ((show pId)++" "++(BC.unpack b))    
+                              Just UnChoke       -> unchoke peer
+                              Just (Bitfield bf) -> bitfield peer bf
+                              Just (Have (pId, b)) ->  have peer pId
                               Nothing -> print "Nothing"
                               _-> loopAndWait peer (show msg) 10000
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
                      where 
                         loopAndWait peer m p=  (threadDelay p) >> (print m)>>talkToPeer peer
 
-                        
+ 
+unchoke :: P.Peer -> IO ()
+unchoke peer = P.setNotVirgin peer>> (print "UNCHOKED")  -- check if interested and request if yes
+
+bitfield :: P.Peer->MsgPayload->IO()
+bitfield peer bf = P.updateBF peer bf 
+                   >> P.setInterested peer
+                   >> (sendMsg (P.handleP peer) Interested)
+                   >> print "Got BF" >> (talkToPeer peer)
+                   
+have :: P.Peer->Int ->IO()
+have peer pId = P.updateBFIndex peer pId    -- Interested?
+                >> print "have" >> (talkToPeer peer)
+ 
+ 
 getMessage :: SIO.Handle -> IO (Maybe (MsgLen, MessageId, MsgPayload))
 getMessage handle = do numBytes <- BL.hGet handle 4
                        if (BL.length numBytes) < 4 
@@ -111,8 +122,7 @@ getMessage handle = do numBytes <- BL.hGet handle 4
                       getMsg size = (\iD p->(size, iD, p))<$>(Id . P.fromBsToInt <$> B.hGet handle 1)
                                                           <*> (B.hGet handle ((fromIntegral size) -1))
                       readBEWord = runGet getWord32be   
-                               
-                                   
+                                                         
                   
 sendMsg :: SIO.Handle -> Message -> IO ()
 sendMsg handle msg = case (msgToLenAndId msg) of

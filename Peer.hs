@@ -12,37 +12,61 @@ import qualified Control.Concurrent.STM.TArray as TA
 import Control.Concurrent.STM
 import Data.IORef
 import Data.Array.IO
+import Data.List
 
 
 myId = "-TR2840-d0p22uiake0b" 
 protocol = "BitTorrent protocol"
 
 
- 
+type STMBitfield = STM (TA.TArray Int Bool) 
+
+data Progress = NextId Int | Finished
+
 data Peer = Peer{ handleP :: SIO.Handle
                 , peerP :: String 
                 , amIInterested :: IORef Bool -- false
                 , amIChocked :: IORef Bool  -- true
                 , amIVirgin :: IORef Bool -- first time I am talking to a peer
-                , bitFieldArray :: IOArray Int Bool
+                , bitFieldArray :: STMBitfield
+                , globalIndexArray :: STMBitfield
                 } 
                 
-type GlobalBitfield = STM (TA.TArray Int Bool)
+
                 
-newGlobalBitField ::Int-> GlobalBitfield
-newGlobalBitField size= newArray (0, size) False     
-                       
+newGlobalBitField ::Int-> STMBitfield
+newGlobalBitField size= newArray (0, size-1) False     
+  
+makeBFArray ::Int-> STMBitfield  
+makeBFArray = newGlobalBitField 
+
+nextPiceToRequest :: Peer -> IO [(Int, Bool)]
+nextPiceToRequest peer = atomically $ do global <- globalIndexArray peer
+                                         bf <- bitFieldArray peer
+                                         let difLs = arrayDiff global bf    
+                                         difLs
+                                              
+          
+arrayDiff:: (MArray a1 e m, MArray a e m, Ix i, Eq e) => a i e -> a1 i e -> m [(i, e)]
+arrayDiff arr1 arr2 = do l1<-(getAssocs arr1)
+                         l2<-(getAssocs arr2)
+                         return (l1 \\ l2)            
+                            
 setNotVirgin :: Peer -> IO ()                       
 setNotVirgin peer = modifyIORef' (amIVirgin peer) (\_->False)                         
 
-setInterested :: Peer-> Bool-> IO () 
-setInterested peer b = modifyIORef' (amIInterested peer) (\_->b) 
+setInterested :: Peer-> IO () 
+setInterested peer = modifyIORef' (amIInterested peer) (\_->True) 
+
+setNotInterested :: Peer-> IO () 
+setNotInterested peer = modifyIORef' (amIInterested peer) (\_->False) 
+
+
+updateBF :: Peer -> BC.ByteString -> IO ()
+updateBF peer bf = atomically $ (bitFieldArray peer)>>=(\arr ->updateArray (arr) bf )
   
-updateBF :: MArray IOArray Bool m => Peer -> BC.ByteString -> m ()  
-updateBF peer bf = updateArray (bitFieldArray peer) bf         
-  
-updateBFIndex :: MArray IOArray Bool m => Peer -> Int -> m ()
-updateBFIndex peer i = writeArray (bitFieldArray peer) i True  
+updateBFIndex :: Peer -> Int -> IO ()
+updateBFIndex peer i = atomically $ (bitFieldArray peer)>>=(\arr ->writeArray arr i True)
          
 canTalkToPeer :: Peer -> IO Bool
 canTalkToPeer peer = do isVirgin <- readIORef (amIVirgin peer)    
@@ -59,7 +83,7 @@ showPeer p= do let name = peerP p
 makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> Int -> IO Peer             
 makePeer hash host port size = do handle<- N.connectTo host (N.PortNumber  port)
                                   SIO.hSetBuffering handle SIO.NoBuffering                            
-                                --   hSetBuffering handle (BlockBuffering Nothing)
+                                --  SIO.hSetBuffering handle (SIO.BlockBuffering Nothing)
                                   --hSetBuffering handle LineBuffering
                                   sendHandshake handle hash $ BC.pack myId
                                   recvHandshake handle size                                        
@@ -82,18 +106,17 @@ recvHandshake handle size = do len <- B.hGet handle 1
                                amIVirgin <- newIORef True
                                amIChocked <- newIORef True
                                amIInterested <- newIORef False
-                               bfArr <- makeBFArray size
-                               return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin bfArr
+                               let bfArr = makeBFArray size
+                               let global = newGlobalBitField size
+                               return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin bfArr global
 
-makeBFArray size = newArray (0,size-1) False :: IO (IOArray Int Bool)
                                   
                     
---updateArray :: IOArray Int Bool -> B.ByteString -> IO ()   
+updateArray:: (MArray a Bool m, Ix i, Num i) =>a i Bool -> BC.ByteString -> m ()
 updateArray arr bs = update arr (convertToBits bs) 0   
 
 
---update :: MArray Int Bool -> [Bool] -> Int -> IO ()
---update :: IOArray Int Bool -> [Bool] -> Int -> IO ()
+update :: (MArray a e m, Ix i, Num i) => a i e -> [e] -> i -> m ()
 update arr [] _ = return ()
 update arr (x:xs) i = do (lo, hi) <- getBounds arr
                          if checkBounds (lo, hi) then

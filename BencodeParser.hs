@@ -110,7 +110,7 @@ printer::IO()
 printer = do content <- parseFromFile "ubuntu.torrent"
              case content of
                   Left l -> print $ "Problem with reading torrent file" ++ (show l)
-                  Right dic -> prettyPrint dic  
+                  Right dic -> print dic  
   
   
 infoPrinter::IO()
