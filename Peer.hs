@@ -1,5 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse, FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
-module Peer (Peer, makePeer, myId, showPeer, peerP, handleP, setInterested, setNotVirgin, bitFieldArray, canTalkToPeer, updateBF, fromBsToInt, updateBFIndex) where
+module Peer (Peer, makePeer, myId, showPeer, peerP, handleP, setInterested, 
+setNotVirgin, getBitFieldList, {--canTalkToPeer,--} updateBF, fromBsToInt, 
+updateBFIndex, amIInterested, bitFieldArray, nextPiceToRequest) where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -11,69 +13,80 @@ import qualified Data.Bits as Bits
 import qualified Control.Concurrent.STM.TArray as TA
 import Control.Concurrent.STM
 import Data.IORef
-import Data.Array.IO
 import Data.List
+import Control.Applicative
+import Data.Array.MArray
 
 
 myId = "-TR2840-d0p22uiake0b" 
 protocol = "BitTorrent protocol"
 
 
-type STMBitfield = STM (TA.TArray Int Bool) 
+type Bitfield = TA.TArray Int Bool -- TODO get rid if STM
 
 data Progress = NextId Int | Finished
 
 data Peer = Peer{ handleP :: SIO.Handle
                 , peerP :: String 
-                , amIInterested :: IORef Bool -- false
+                , amIInterested :: TVar Bool -- false
                 , amIChocked :: IORef Bool  -- true
                 , amIVirgin :: IORef Bool -- first time I am talking to a peer
-                , bitFieldArray :: STMBitfield
-                , globalIndexArray :: STMBitfield
+                , bitFieldArray :: Bitfield
+                , globalIndexArray :: Bitfield
                 } 
                 
 
+newStm = atomically (newTVar False)
                 
-newGlobalBitField ::Int-> STMBitfield
-newGlobalBitField size= newArray (0, size-1) False     
+newGlobalBitField ::Int-> IO Bitfield
+newGlobalBitField size= atomically $ newArray (0, size-1) False     
   
-makeBFArray ::Int-> STMBitfield  
+makeBFArray ::Int-> IO Bitfield  
 makeBFArray = newGlobalBitField 
 
+getBitFieldList peer = atomically $ do let arr = bitFieldArray peer
+                                      -- _ <- writeArray arr 1 True
+                                       getAssocs arr
+
 nextPiceToRequest :: Peer -> IO [(Int, Bool)]
-nextPiceToRequest peer = atomically $ do global <- globalIndexArray peer
-                                         bf <- bitFieldArray peer
-                                         let difLs = arrayDiff global bf    
+nextPiceToRequest peer = atomically $ do let global = globalIndexArray peer
+                                         let bf = bitFieldArray peer
+                                         let difLs = arrayDiff bf global   
                                          difLs
                                               
           
-arrayDiff:: (MArray a1 e m, MArray a e m, Ix i, Eq e) => a i e -> a1 i e -> m [(i, e)]
-arrayDiff arr1 arr2 = do l1<-(getAssocs arr1)
+arrayDiff:: (MArray a1 e m, MArray a e m, Applicative m, Ix i, Eq e) => a i e -> a1 i e -> m [(i, e)]
+arrayDiff arr1 arr2 = ((\\))<$> (getAssocs arr1) <*> (getAssocs arr2)
+                  
+                  {--do l1<-(getAssocs arr1)
                          l2<-(getAssocs arr2)
                          return (l1 \\ l2)            
-                            
+                         --}       
 setNotVirgin :: Peer -> IO ()                       
 setNotVirgin peer = modifyIORef' (amIVirgin peer) (\_->False)                         
 
 setInterested :: Peer-> IO () 
-setInterested peer = modifyIORef' (amIInterested peer) (\_->True) 
+setInterested peer = atomically $ writeTVar (amIInterested peer) True
 
-setNotInterested :: Peer-> IO () 
-setNotInterested peer = modifyIORef' (amIInterested peer) (\_->False) 
+--setNotInterested :: Peer-> IO () 
+--setNotInterested peer = atomically $ writeTVar (amIInterested peer) False 
 
 
 updateBF :: Peer -> BC.ByteString -> IO ()
-updateBF peer bf = atomically $ (bitFieldArray peer)>>=(\arr ->updateArray (arr) bf )
+updateBF peer bf = atomically $ updateArray (bitFieldArray peer) bf 
   
 updateBFIndex :: Peer -> Int -> IO ()
-updateBFIndex peer i = atomically $ (bitFieldArray peer)>>=(\arr ->writeArray arr i True)
-         
+updateBFIndex peer i = atomically $  writeArray (bitFieldArray peer) i True
+                                             
+                          
+                          
+                       {--    
 canTalkToPeer :: Peer -> IO Bool
 canTalkToPeer peer = do isVirgin <- readIORef (amIVirgin peer)    
                         isInterested <-readIORef (amIInterested peer)                     
                         isIChocked <- readIORef (amIChocked peer)
                         return $  isVirgin || (isIChocked && isInterested)               
-                       
+                        --}
 --showPeer :: Peer -> IO String                  
 showPeer p= do let name = peerP p
              --  arr <-getElems (bitFieldArray p)    
@@ -105,9 +118,9 @@ recvHandshake handle size = do len <- B.hGet handle 1
                                peer <- B.hGet handle 20 
                                amIVirgin <- newIORef True
                                amIChocked <- newIORef True
-                               amIInterested <- newIORef False
-                               let bfArr = makeBFArray size
-                               let global = newGlobalBitField size
+                               amIInterested <- atomically (newTVar False)
+                               bfArr <- makeBFArray size
+                               global <- newGlobalBitField size
                                return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin bfArr global
 
                                   
@@ -116,15 +129,15 @@ updateArray:: (MArray a Bool m, Ix i, Num i) =>a i Bool -> BC.ByteString -> m ()
 updateArray arr bs = update arr (convertToBits bs) 0   
 
 
-update :: (MArray a e m, Ix i, Num i) => a i e -> [e] -> i -> m ()
+update :: (MArray a Bool m, Ix i, Num i) => a i Bool -> [Bool] -> i -> m ()
 update arr [] _ = return ()
 update arr (x:xs) i = do (lo, hi) <- getBounds arr
                          if checkBounds (lo, hi) then
                             (writeArray arr i x) >> update arr xs (i+1)
                          else
                             return ()     
-                      where checkBounds (lo,hi) = lo>=i && hi<=i
-        
+                      where checkBounds (lo,hi) = lo <=i && hi>=i
+                        
 convertToBits bs = [Bits.testBit w i| w<-B.unpack bs, i<-[7,6.. 0]]
              
 fromBsToInt bs = sum $ zipWith (\x y->x*2^y) (reverse ws) [0,8..]

@@ -17,6 +17,9 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Monad
 import Control.Monad.Error
+import Control.Concurrent.STM
+import Data.Array.MArray
+import Data.IORef
 
 type MsgLen = Word32
 
@@ -80,8 +83,8 @@ talk peer =  E.catch (talkToPeer peer) (\(e::E.SomeException) -> print $ "Failur
 
                             
 talkToPeer :: P.Peer -> IO ()
-talkToPeer peer = do canTalk <- P.canTalkToPeer peer 
-                     if (canTalk) then do
+talkToPeer peer = do --canTalk <- P.canTalkToPeer peer 
+                     if (True) then do
                         let handle = P.handleP peer
                         lenAndId <- getMessage handle
                         let msg = liftM lenAndIdToMsg lenAndId
@@ -101,11 +104,24 @@ unchoke :: P.Peer -> IO ()
 unchoke peer = P.setNotVirgin peer>> (print "UNCHOKED")  -- check if interested and request if yes
 
 bitfield :: P.Peer->MsgPayload->IO()
-bitfield peer bf = P.updateBF peer bf 
-                   >> P.setInterested peer
-                   >> (sendMsg (P.handleP peer) Interested)
-                   >> print "Got BF" >> (talkToPeer peer)
+bitfield peer bf = do 
+                   {--   _ <- print $ "bf "++(show bf)
+                      _ <- P.updateBFIndex peer 0  --P.updateBF peer bf
+                      print "--"
+                      ls <-  P.getBitFieldList peer
+                      print $ "p bf "++ (show ls)
                    
+                   --}
+                      _ <- P.updateBF peer bf
+                      nextLs <- P.nextPiceToRequest peer
+                      case nextLs of
+                           []    -> print "Finisched"
+                           x:xs  -> print ("Interested in "++ (show x))
+                                    >> P.setInterested peer
+                                    >> (sendMsg (P.handleP peer) Interested)
+                                    >> print "Got BF" >> (talkToPeer peer)
+
+
 have :: P.Peer->Int ->IO()
 have peer pId = P.updateBFIndex peer pId    -- Interested?
                 >> print "have" >> (talkToPeer peer)
