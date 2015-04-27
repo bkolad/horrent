@@ -32,7 +32,7 @@ data Peer = Peer{ handleP :: SIO.Handle
                 , amIChocked :: IORef Bool  -- true
                 , amIVirgin :: IORef Bool -- first time I am talking to a peer
                 , bitFieldArray :: Bitfield
-                , globalIndexArray :: Bitfield
+                , globalIndexArray :: Bitfield -- TO do diffrent statuste req, pending, done 
                 } 
                 
 
@@ -44,24 +44,19 @@ newGlobalBitField size= atomically $ newArray (0, size-1) False
 makeBFArray ::Int-> IO Bitfield  
 makeBFArray = newGlobalBitField 
 
-getBitFieldList peer = atomically $ do let arr = bitFieldArray peer
-                                      -- _ <- writeArray arr 1 True
-                                       getAssocs arr
+getBitFieldList peer = atomically $ let arr =  bitFieldArray peer
+                                    in getAssocs arr
 
 nextPiceToRequest :: Peer -> IO [(Int, Bool)]
-nextPiceToRequest peer = atomically $ do let global = globalIndexArray peer
-                                         let bf = bitFieldArray peer
-                                         let difLs = arrayDiff bf global   
-                                         difLs
-                                              
+nextPiceToRequest peer = atomically $ let global = globalIndexArray peer
+                                          bf = bitFieldArray peer
+                                      in arrayDiff bf global  
+                                                                                   
           
 arrayDiff:: (MArray a1 e m, MArray a e m, Applicative m, Ix i, Eq e) => a i e -> a1 i e -> m [(i, e)]
 arrayDiff arr1 arr2 = ((\\))<$> (getAssocs arr1) <*> (getAssocs arr2)
                   
-                  {--do l1<-(getAssocs arr1)
-                         l2<-(getAssocs arr2)
-                         return (l1 \\ l2)            
-                         --}       
+                   
 setNotVirgin :: Peer -> IO ()                       
 setNotVirgin peer = modifyIORef' (amIVirgin peer) (\_->False)                         
 

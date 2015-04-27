@@ -104,15 +104,7 @@ unchoke :: P.Peer -> IO ()
 unchoke peer = P.setNotVirgin peer>> (print "UNCHOKED")  -- check if interested and request if yes
 
 bitfield :: P.Peer->MsgPayload->IO()
-bitfield peer bf = do 
-                   {--   _ <- print $ "bf "++(show bf)
-                      _ <- P.updateBFIndex peer 0  --P.updateBF peer bf
-                      print "--"
-                      ls <-  P.getBitFieldList peer
-                      print $ "p bf "++ (show ls)
-                   
-                   --}
-                      _ <- P.updateBF peer bf
+bitfield peer bf = do _ <- P.updateBF peer bf
                       nextLs <- P.nextPiceToRequest peer
                       case nextLs of
                            []    -> print "Finisched"
