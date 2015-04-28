@@ -18,6 +18,7 @@ import Control.Exception as E
 import Control.Applicative
 import Control.Monad.Error
 import Data.ByteString.Base16 (encode)
+import Types
 
 
 liftEither = ErrorT . return
@@ -34,7 +35,8 @@ makePeers tracker numberOfP = do content <-  liftIO $ BP.parseFromFile tracker
                                  resp <- (liftIO . getResponseFromTracker) url
                                  peersBS <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
                                  let ls =  getIPandPort peersBS    
-                                 peers <- liftIO $ Async.mapConcurrently (\(h,p)->  makePeer hash (show h) (fromIntegral p) pNum) (take numberOfP ls) 
+                                 gpi <- liftIO $ newGlobalBitField pNum
+                                 peers <- liftIO $ Async.mapConcurrently (\(h,p)->  makePeer hash (show h) (fromIntegral p) pNum gpi) (take numberOfP ls) 
                                  let (ll, pp) = DE.partitionEithers peers
                                  case ll of
                                       [] -> return []
@@ -42,9 +44,9 @@ makePeers tracker numberOfP = do content <-  liftIO $ BP.parseFromFile tracker
                                  return pp
                                  
 
-makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> Int -> IO (Either String P.Peer)
-makePeer hash h p size = E.catch (liftM Right $ P.makePeer hash h p size)
-                             (\(e::SomeException) -> return . Left $ (show e) ++" "++ (show h))                                 
+makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> Int -> GlobalPiceInfo -> IO (Either String P.Peer)
+makePeer hash h p size gpi = E.catch (liftM Right $ P.makePeer hash h p size gpi)
+                                     (\(e::SomeException) -> return . Left $ (show e) ++" "++ (show h))                                 
 
                              
 getResponseFromTracker :: String -> IO String

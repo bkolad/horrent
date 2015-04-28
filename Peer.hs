@@ -16,13 +16,14 @@ import Data.IORef
 import Data.List
 import Control.Applicative
 import Data.Array.MArray
+import Types
 
 
 myId = "-TR2840-d0p22uiake0b" 
 protocol = "BitTorrent protocol"
 
 
-type Bitfield = TA.TArray Int Bool -- TODO get rid if STM
+type Bitfield = TA.TArray Int Bool 
 
 data Progress = NextId Int | Finished
 
@@ -32,17 +33,15 @@ data Peer = Peer{ handleP :: SIO.Handle
                 , amIChocked :: IORef Bool  -- true
                 , amIVirgin :: IORef Bool -- first time I am talking to a peer
                 , bitFieldArray :: Bitfield
-                , globalIndexArray :: Bitfield -- TO do diffrent statuste req, pending, done 
+                , globalIndexArray :: GlobalPiceInfo -- TO do diffrent statuste req, pending, done 
                 } 
                 
 
 newStm = atomically (newTVar False)
-                
-newGlobalBitField ::Int-> IO Bitfield
-newGlobalBitField size= atomically $ newArray (0, size-1) False     
+                   
   
 makeBFArray ::Int-> IO Bitfield  
-makeBFArray = newGlobalBitField 
+makeBFArray size = atomically $ newArray (0, size-1) False  
 
 getBitFieldList peer = atomically $ let arr =  bitFieldArray peer
                                     in getAssocs arr
@@ -88,14 +87,14 @@ showPeer p= do let name = peerP p
                return name--(name, arr)
                          
                  
-makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> Int -> IO Peer             
-makePeer hash host port size = do handle<- N.connectTo host (N.PortNumber  port)
-                                  SIO.hSetBuffering handle SIO.NoBuffering                            
-                                --  SIO.hSetBuffering handle (SIO.BlockBuffering Nothing)
-                                  --hSetBuffering handle LineBuffering
-                                  sendHandshake handle hash $ BC.pack myId
-                                  recvHandshake handle size                                        
-                                    
+makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> Int -> GlobalPiceInfo-> IO Peer             
+makePeer hash host port size globalPiceInfo = do handle<- N.connectTo host (N.PortNumber  port)
+                                                 SIO.hSetBuffering handle SIO.NoBuffering                            
+                                                --  SIO.hSetBuffering handle (SIO.BlockBuffering Nothing)
+                                                  --hSetBuffering handle LineBuffering
+                                                 sendHandshake handle hash $ BC.pack myId
+                                                 recvHandshake handle size globalPiceInfo                                      
+                                                    
              
 sendHandshake :: SIO.Handle -> B.ByteString -> B.ByteString -> IO ()
 sendHandshake handle hash peer = BC.hPutStr handle msg -- >> print "Handshake finished"
@@ -105,18 +104,17 @@ sendHandshake handle hash peer = BC.hPutStr handle msg -- >> print "Handshake fi
               rsrv = B.replicate 8 (fromIntegral 0)       
               
               
-recvHandshake :: SIO.Handle-> Int -> IO Peer
-recvHandshake handle size = do len <- B.hGet handle 1
-                               ptr <- B.hGet handle $ fromBsToInt len
-                               rsrv <- B.hGet handle 8
-                               hash <- B.hGet handle 20
-                               peer <- B.hGet handle 20 
-                               amIVirgin <- newIORef True
-                               amIChocked <- newIORef True
-                               amIInterested <- atomically (newTVar False)
-                               bfArr <- makeBFArray size
-                               global <- newGlobalBitField size
-                               return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin bfArr global
+recvHandshake :: SIO.Handle-> Int -> GlobalPiceInfo -> IO Peer
+recvHandshake handle size globalPiceInfo = do len <- B.hGet handle 1
+                                              ptr <- B.hGet handle $ fromBsToInt len
+                                              rsrv <- B.hGet handle 8
+                                              hash <- B.hGet handle 20
+                                              peer <- B.hGet handle 20 
+                                              amIVirgin <- newIORef True
+                                              amIChocked <- newIORef True
+                                              amIInterested <- atomically (newTVar False)
+                                              bfArr <- makeBFArray size
+                                              return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin bfArr globalPiceInfo
 
                                   
                     
