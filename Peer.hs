@@ -43,17 +43,19 @@ newStm = atomically (newTVar False)
 makeBFArray ::Int-> IO Bitfield  
 makeBFArray size = atomically $ newArray (0, size-1) False  
 
-getBitFieldList peer = atomically $ let arr =  bitFieldArray peer
-                                    in getAssocs arr
+getBitFieldList peer = atomically $ getAssocs $ bitFieldArray peer 
+                                   
 
 nextPiceToRequest :: Peer -> IO [(Int, Bool)]
-nextPiceToRequest peer = atomically $ let global = globalIndexArray peer
-                                          bf = bitFieldArray peer
-                                      in arrayDiff bf global  
-                                                                                   
-          
-arrayDiff:: (MArray a1 e m, MArray a e m, Applicative m, Ix i, Eq e) => a i e -> a1 i e -> m [(i, e)]
-arrayDiff arr1 arr2 = ((\\))<$> (getAssocs arr1) <*> (getAssocs arr2)
+nextPiceToRequest peer = do atomically $ arrayDiff (globalIndexArray peer) (bitFieldArray peer)
+                          
+arrayDiff :: (MArray a1 PiceInfo m, MArray a Bool m, Applicative m, Ix i) => a1 i PiceInfo -> a i Bool -> m [(i, Bool)]
+arrayDiff arr1 arr2 = do l1 <- (getAssocs arr1)
+                         l2 <- (getAssocs arr2)
+                         return $ ((isNotHave) <$> l1) \\ l2 
+  where isNotHave n = case n of
+                         (i, NotHave) -> (i, False)
+                         (i, _)       -> (i, True)
                   
                    
 setNotVirgin :: Peer -> IO ()                       

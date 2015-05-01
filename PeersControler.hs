@@ -32,7 +32,7 @@ data Message = KeepAlive
              | NotInterested
              | Have (Int, B.ByteString)
              | Bitfield MsgPayload
-             | Request
+             | Request (Int, Int, Int)
              | Piece
              | Cancel
              | Port 
@@ -41,20 +41,22 @@ data Message = KeepAlive
              
 data MessageId = NoId | Id Int deriving (Show)     
 
-msgToLenAndId :: Message -> (MsgLen, MessageId)
+
+msgToLenAndId :: Message -> (MsgLen, MessageId, Message)
 msgToLenAndId msg = case msg of
-                         KeepAlive     -> (0, NoId)
-                         Choke         -> (1, Id 0)
-                         UnChoke       -> (1, Id 1)
-                         Interested    -> (1, Id 2)
-                         NotInterested -> (1, Id 3)
-                         Have _        -> (5, Id 4)
-                         Bitfield _    -> undefined
-                         Request       -> (13, Id 6)
-                         Piece         -> undefined
-                         Cancel        -> (13, Id 8)
-                         Port          -> (3, Id 9)
-                         Unknown _ _     -> undefined --(99, Id 99)
+                         m@KeepAlive     -> (0, NoId, m)
+                         m@Choke         -> (1, Id 0, m)
+                         m@UnChoke       -> (1, Id 1, m)
+                         m@Interested    -> (1, Id 2, m)
+                         m@NotInterested -> (1, Id 3, m)
+                         m@(Have _)      -> (5, Id 4, m)
+                         m@(Bitfield _)  -> undefined
+                         m@(Request _ )  -> (13, Id 6, m)
+                         m@Piece         -> undefined
+                         m@Cancel        -> (13, Id 8, m)
+                         m@Port          -> (3, Id 9, m)
+                         m@(Unknown _ _ )-> undefined --(99, Id 99)
+
 
 lenAndIdToMsg :: (MsgLen, MessageId, MsgPayload) -> Message 
 lenAndIdToMsg lenId = case lenId of
@@ -65,7 +67,7 @@ lenAndIdToMsg lenId = case lenId of
                           (1, Id 3, bs)   -> NotInterested
                           (5, Id 4, pId)  -> Have (P.fromBsToInt pId, pId)
                           (len, Id 5, bf) -> Bitfield bf
-                          (13, Id 6, bs)  -> Request
+                          (13, Id 6, bs)  -> Request (undefined, undefined, undefined)
                           (len, Id 7, bs) -> Piece 
                           (13, Id 8, bs)  -> Cancel
                           (3, Id 9, bs)   -> Port
@@ -93,6 +95,7 @@ talkToPeer peer = do --canTalk <- P.canTalkToPeer peer
                               Just UnChoke       -> unchoke peer
                               Just (Bitfield bf) -> bitfield peer bf
                               Just (Have (pId, b)) ->  have peer pId
+                              Just Piece -> print "PIECE!!!!!!!!!"
                               Nothing -> print "Nothing"
                               _-> loopAndWait peer (show msg) 10000
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
@@ -101,23 +104,26 @@ talkToPeer peer = do --canTalk <- P.canTalkToPeer peer
 
  
 unchoke :: P.Peer -> IO ()
-unchoke peer = P.setNotVirgin peer>> (print "UNCHOKED")  -- check if interested and request if yes
+unchoke peer = do nextLs <- P.nextPiceToRequest peer
+                  case nextLs of
+                         []   -> print "Finisched"
+                         (x, b):xs -> (sendMsg peer $ Request (0, 0, 16384))
+                                      >> print ("Request "++ (show x))
+                                      >> talkToPeer peer
+                   
 
-bitfield :: P.Peer->MsgPayload->IO()
-bitfield peer bf = do _ <- P.updateBF peer bf
-                      nextLs <- P.nextPiceToRequest peer
-                      case nextLs of
-                           []    -> print "Finisched"
-                           x:xs  -> print ("Interested in "++ (show x))
-                                    >> P.setInterested peer
-                                    >> (sendMsg (P.handleP peer) Interested)
-                                    >> print "Got BF" >> (talkToPeer peer)
+bitfield :: P.Peer -> MsgPayload -> IO()
+bitfield peer bf = P.updateBF peer bf
+                   >> sendInterested peer
+                   >> print "Got BF" >> (talkToPeer peer)
 
 
 have :: P.Peer->Int ->IO()
 have peer pId = P.updateBFIndex peer pId    -- Interested?
+                >> sendInterested peer
                 >> print "have" >> (talkToPeer peer)
  
+sendInterested peer =  (sendMsg peer Interested)
  
 getMessage :: SIO.Handle -> IO (Maybe (MsgLen, MessageId, MsgPayload))
 getMessage handle = do numBytes <- BL.hGet handle 4
@@ -132,10 +138,17 @@ getMessage handle = do numBytes <- BL.hGet handle 4
                       readBEWord = runGet getWord32be   
                                                          
                   
-sendMsg :: SIO.Handle -> Message -> IO ()
-sendMsg handle msg = case (msgToLenAndId msg) of
-                          (x, NoId) -> send $ putWord32be x
-                          (x, Id y) -> send $ putWord32be x >> putWord8 (fromIntegral y)
-                          where 
-                            send = BL.hPutStr handle . runPut  
-   
+sendMsg :: P.Peer -> Message -> IO ()
+sendMsg peer msg = case (msgToLenAndId msg) of
+                        (x, NoId, _) -> send $ putWord32be x
+                        (x, Id y, Request (i, o, l)) -> send $ putWord32be x >> putWord8 (fromIntegral y) 
+                                                                             >> put32Int i 
+                                                                             >> put32Int o 
+                                                                             >> put32Int l
+                        (x, Id y, _) -> send $ putWord32be x >> putWord8 (fromIntegral y)
+                        where 
+                          handle = P.handleP peer
+                          send = BL.hPutStr handle . runPut  
+                          put32Int = putWord32be . fromIntegral
+ 
+ 
