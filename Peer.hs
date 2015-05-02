@@ -91,9 +91,9 @@ showPeer p= do let name = peerP p
                  
 makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> Int -> GlobalPiceInfo-> IO Peer             
 makePeer hash host port size globalPiceInfo = do handle<- N.connectTo host (N.PortNumber  port)
-                                                 SIO.hSetBuffering handle SIO.NoBuffering                            
-                                                --  SIO.hSetBuffering handle (SIO.BlockBuffering Nothing)
-                                                  --hSetBuffering handle LineBuffering
+                                                 --SIO.hSetBuffering handle SIO.NoBuffering                            
+                                                 -- SIO.hSetBuffering handle (SIO.BlockBuffering Nothing)
+                                                 --SIO.hSetBuffering handle SIO.LineBuffering
                                                  sendHandshake handle hash $ BC.pack myId
                                                  recvHandshake handle size globalPiceInfo                                      
                                                     

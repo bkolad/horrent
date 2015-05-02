@@ -11,6 +11,7 @@ import qualified Control.Exception as E
 import qualified Data.ByteString.Char8 as BC
 import qualified System.IO as SIO
 import Data.Word
+import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
 import Control.Applicative
@@ -25,6 +26,7 @@ type MsgLen = Word32
 
 type MsgPayload = B.ByteString
 
+
 data Message = KeepAlive 
              | Choke
              | UnChoke
@@ -33,46 +35,16 @@ data Message = KeepAlive
              | Have (Int, B.ByteString)
              | Bitfield MsgPayload
              | Request (Int, Int, Int)
-             | Piece
+             | Piece (Int, Int, B.ByteString)
              | Cancel
              | Port 
-             | Unknown MsgLen MessageId
+             | Unknown MsgLen Int
              deriving (Show)
              
-data MessageId = NoId | Id Int deriving (Show)     
-
-
-msgToLenAndId :: Message -> (MsgLen, MessageId, Message)
-msgToLenAndId msg = case msg of
-                         m@KeepAlive     -> (0, NoId, m)
-                         m@Choke         -> (1, Id 0, m)
-                         m@UnChoke       -> (1, Id 1, m)
-                         m@Interested    -> (1, Id 2, m)
-                         m@NotInterested -> (1, Id 3, m)
-                         m@(Have _)      -> (5, Id 4, m)
-                         m@(Bitfield _)  -> undefined
-                         m@(Request _ )  -> (13, Id 6, m)
-                         m@Piece         -> undefined
-                         m@Cancel        -> (13, Id 8, m)
-                         m@Port          -> (3, Id 9, m)
-                         m@(Unknown _ _ )-> undefined --(99, Id 99)
-
-
-lenAndIdToMsg :: (MsgLen, MessageId, MsgPayload) -> Message 
-lenAndIdToMsg lenId = case lenId of
-                          (0, NoId, _)   -> KeepAlive
-                          (1, Id 0, bs)   -> Choke
-                          (1, Id 1, bs)   -> UnChoke
-                          (1, Id 2, bs)   -> Interested
-                          (1, Id 3, bs)   -> NotInterested
-                          (5, Id 4, pId)  -> Have (P.fromBsToInt pId, pId)
-                          (len, Id 5, bf) -> Bitfield bf
-                          (13, Id 6, bs)  -> Request (undefined, undefined, undefined)
-                          (len, Id 7, bs) -> Piece 
-                          (13, Id 8, bs)  -> Cancel
-                          (3, Id 9, bs)   -> Port
-                          (i, iD, _)      -> Unknown i iD                                   
-
+                            
+  
+                       
+                          
                           
 start :: String -> Int -> ErrorT String IO [P.Peer]                     
 start tracker n= do peers <- C.makePeers tracker n 
@@ -88,15 +60,14 @@ talkToPeer :: P.Peer -> IO ()
 talkToPeer peer = do --canTalk <- P.canTalkToPeer peer 
                      if (True) then do
                         let handle = P.handleP peer
-                        lenAndId <- getMessage handle
-                        let msg = liftM lenAndIdToMsg lenAndId
+                        print "Waiting"
+                        msg <-  getMessage handle--  liftM lenAndIdToMsg lenAndId
                         case msg of
-                              Just KeepAlive     -> loopAndWait peer "Alive" 100000
-                              Just UnChoke       -> unchoke peer
-                              Just (Bitfield bf) -> bitfield peer bf
-                              Just (Have (pId, b)) ->  have peer pId
-                              Just Piece -> print "PIECE!!!!!!!!!"
-                              Nothing -> print "Nothing"
+                              KeepAlive     -> loopAndWait peer "Alive" 100000
+                              UnChoke       -> unchoke peer
+                              Bitfield bf -> bitfield peer bf
+                              Have (pId, b) ->  have peer pId
+                              Piece (i,b,c) -> print $ "PIECE!!!!!!!!! "++ (show i) ++"  "++(show b)
                               _-> loopAndWait peer (show msg) 10000
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
                      where 
@@ -107,7 +78,7 @@ unchoke :: P.Peer -> IO ()
 unchoke peer = do nextLs <- P.nextPiceToRequest peer
                   case nextLs of
                          []   -> print "Finisched"
-                         (x, b):xs -> (sendMsg peer $ Request (0, 0, 16384))
+                         (x, b):xs -> (sendMsg peer $ Request (10, 16384, 16384))
                                       >> print ("Request "++ (show x))
                                       >> talkToPeer peer
                    
@@ -125,30 +96,63 @@ have peer pId = P.updateBFIndex peer pId    -- Interested?
  
 sendInterested peer =  (sendMsg peer Interested)
  
-getMessage :: SIO.Handle -> IO (Maybe (MsgLen, MessageId, MsgPayload))
-getMessage handle = do numBytes <- BL.hGet handle 4
-                       if (BL.length numBytes) < 4 
-                          then return Nothing  
-                       else 
-                            Just <$> (getMsg (readBEWord numBytes))
-                     where
-                      getMsg 0 = return (0, NoId, B.empty)
-                      getMsg size = (\iD p->(size, iD, p))<$>(Id . P.fromBsToInt <$> B.hGet handle 1)
-                                                          <*> (B.hGet handle ((fromIntegral size) -1))
-                      readBEWord = runGet getWord32be   
+   
+instance Binary Message where
+  
+   put KeepAlive           = putWord32be 0
+   put Choke               = putWord32be 1 >> putWord8 0
+   put UnChoke             = putWord32be 1 >> putWord8 1
+   put Interested          = putWord32be 1 >> putWord8 2
+   put NotInterested       = putWord32be 1 >> putWord8 3
+   put (Request (i, o, l)) = putWord32be 13 >> putWord8 6 >> put32Int i 
+                                                          >> put32Int o 
+                                                          >> put32Int l
+                                 
+       where  put32Int = putWord32be . fromIntegral    
+   
+   
+   put (Piece _)           = undefined
+   put Cancel              = putWord32be 13 >> putWord8 8
+   put Port                = putWord32be 3 >> putWord8 9
+   put (Unknown _ _)       = undefined 
+   
+   
+   
+   get = do numBytes <- fromIntegral <$> getWord32be
+            if (numBytes == 0)
+               then return KeepAlive
+               else do idx <- getWord8
+                       let size = numBytes -1  
+                       bs <- getByteString size
+                       case idx of
+                             0 -> return Choke
+                             1 -> return UnChoke
+                             2 -> return Interested
+                             3 -> return NotInterested
+                             4 -> return $ Have (P.fromBsToInt bs, bs)
+                             5 -> return $ Bitfield bs
+                             6 -> return $ Request (undefined, undefined, undefined)
+                             7 -> return $ Piece (toPiece bs)
+                             8 -> return $ Cancel
+                             9 -> return $ Port
+                             x -> return $ Unknown (fromIntegral size) (fromIntegral x)
+       
+       
+toPiece bs = runGet getTripplet (BL.fromChunks [bs])
+  where getTripplet :: Get (Int, Int, B.ByteString)
+        getTripplet = do idx <-  getWord32be
+                         begin <- getWord32be
+                         rest <- getRemainingLazyByteString
+                         return $ (fromIntegral idx, fromIntegral begin, (B.concat . BL.toChunks) rest)
+   
+   
+getMessage :: SIO.Handle -> IO Message 
+getMessage handle =  decode <$> (BL.hGetContents handle)
                                                          
                   
 sendMsg :: P.Peer -> Message -> IO ()
-sendMsg peer msg = case (msgToLenAndId msg) of
-                        (x, NoId, _) -> send $ putWord32be x
-                        (x, Id y, Request (i, o, l)) -> send $ putWord32be x >> putWord8 (fromIntegral y) 
-                                                                             >> put32Int i 
-                                                                             >> put32Int o 
-                                                                             >> put32Int l
-                        (x, Id y, _) -> send $ putWord32be x >> putWord8 (fromIntegral y)
-                        where 
-                          handle = P.handleP peer
-                          send = BL.hPutStr handle . runPut  
-                          put32Int = putWord32be . fromIntegral
- 
- 
+sendMsg peer msg = send msg
+  where handle = P.handleP peer
+        send = BL.hPutStr handle . encode  
+                          
+                 
