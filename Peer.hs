@@ -17,6 +17,9 @@ import Data.List
 import Control.Applicative
 import Data.Array.MArray
 import Types
+import Data.Binary
+import Data.Binary.Put
+
 
 
 myId = "-TR2840-d0p22uiake0b" 
@@ -105,6 +108,26 @@ sendHandshake handle hash peer = BC.hPutStr handle msg -- >> print "Handshake fi
               ptr = BC.pack protocol
               rsrv = B.replicate 8 (fromIntegral 0)       
               
+
+data Handshake = Handshake { len :: Int 
+                           , peerProtocol :: String
+                           , reserved :: B.ByteString
+                           , hash :: B.ByteString
+                           , peerName :: String
+                           }              
+                           
+  
+  
+instance Binary Handshake where  
+  
+  put handshake = putWord8 (fromIntegral . length $ protocol) 
+               >> (putByteString $ BC.pack protocol) 
+               >> (putWord64be 0)
+               >> (putByteString $ hash handshake)
+               >> (putByteString $ BC.pack $ peerName handshake)
+  
+  
+  get = undefined
               
 recvHandshake :: SIO.Handle-> Int -> GlobalPiceInfo -> IO Peer
 recvHandshake handle size globalPiceInfo = do len <- B.hGet handle 1
