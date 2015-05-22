@@ -18,6 +18,7 @@ import Control.Applicative
 import Data.Array.MArray
 import Types
 import Data.Binary
+import Data.Binary.Get
 import Data.Binary.Put
 
 
@@ -102,47 +103,27 @@ makePeer hash host port size globalPiceInfo = do handle<- N.connectTo host (N.Po
                                                     
              
 sendHandshake :: SIO.Handle -> B.ByteString -> B.ByteString -> IO ()
-sendHandshake handle hash peer = BC.hPutStr handle msg -- >> print "Handshake finished"
-        where msg = B.concat [len, ptr, rsrv, hash, peer]
-              len = B.singleton $ (fromIntegral . length) protocol
-              ptr = BC.pack protocol
-              rsrv = B.replicate 8 (fromIntegral 0)       
-              
-
-data Handshake = Handshake { len :: Int 
-                           , peerProtocol :: String
-                           , reserved :: B.ByteString
-                           , hash :: B.ByteString
-                           , peerName :: String
-                           }              
-                           
-  
-  
-instance Binary Handshake where  
-  
-  put handshake = putWord8 (fromIntegral . length $ protocol) 
-               >> (putByteString $ BC.pack protocol) 
-               >> (putWord64be 0)
-               >> (putByteString $ hash handshake)
-               >> (putByteString $ BC.pack $ peerName handshake)
-  
-  
-  get = undefined
-              
+sendHandshake handle hash peer = BL.hPutStr handle $ encode handshake -- >> print "Handshake finished"
+  where handshake = Handshake len protocol rsrv hash myId
+        len = length protocol
+        rsrv = B.replicate 8 0 
+        
+                                     
+           
+getHandshake :: SIO.Handle -> IO Handshake 
+getHandshake handle =  decode <$> (BL.hGetContents handle)
+        
 recvHandshake :: SIO.Handle-> Int -> GlobalPiceInfo -> IO Peer
-recvHandshake handle size globalPiceInfo = do len <- B.hGet handle 1
-                                              ptr <- B.hGet handle $ fromBsToInt len
-                                              rsrv <- B.hGet handle 8
-                                              hash <- B.hGet handle 20
-                                              peer <- B.hGet handle 20 
+recvHandshake handle size globalPiceInfo = do handshake <- getHandshake handle
                                               amIVirgin <- newIORef True
                                               amIChocked <- newIORef True
                                               amIInterested <- atomically (newTVar False)
                                               bfArr <- makeBFArray size
-                                              return $ Peer handle (BC.unpack peer) amIInterested amIChocked amIVirgin bfArr globalPiceInfo
-
-                                  
-                    
+                                              return $ Peer handle (peerName handshake) amIInterested amIChocked amIVirgin bfArr globalPiceInfo
+  
+                                
+                                         
+                                         
 updateArray:: (MArray a Bool m, Ix i, Num i) =>a i Bool -> BC.ByteString -> m ()
 updateArray arr bs = update arr (convertToBits bs) 0   
 
@@ -159,7 +140,34 @@ update arr (x:xs) i = do (lo, hi) <- getBounds arr
 convertToBits bs = [Bits.testBit w i| w<-B.unpack bs, i<-[7,6.. 0]]
              
 fromBsToInt bs = sum $ zipWith (\x y->x*2^y) (reverse ws) [0,8..]
-                 where ws = map fromIntegral (B.unpack bs)               
+                 where ws = map fromIntegral (B.unpack bs)       
+  
+  
+  
+  
+data Handshake = Handshake { len :: Int 
+                           , peerProtocol :: String
+                           , reserved :: B.ByteString
+                           , hash :: B.ByteString
+                           , peerName :: String
+                           }              
+  
+instance Binary Handshake where  
+  
+  put handshake = putWord8 (fromIntegral . length $ protocol) 
+               >> (putByteString $ BC.pack protocol) 
+               >> (putWord64be 0)
+               >> (putByteString $ hash handshake)
+               >> (putByteString $ BC.pack $ peerName handshake)
+  
+  
+  get = do len <- (fromBsToInt <$> getByteString 1)
+           ptr <- BC.unpack <$> getByteString len
+           rsrv <- getByteString 8
+           hash <- getByteString 20
+           peer <- BC.unpack <$> getByteString 20 
+           return $ Handshake len ptr rsrv hash peer                       
+
                                                                         
 
 
