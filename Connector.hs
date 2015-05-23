@@ -32,6 +32,8 @@ makePeers tracker numberOfP = do content <-  liftIO $ BP.parseFromFile tracker
                                  tSize<- liftEither $ content >>= BP.torrentSize
                                  let pNum= ceiling $ ((fromIntegral tSize)/(fromIntegral pSize)) -- +5
                                  liftIO $ print pNum    
+                                 liftIO $ print tSize
+                                 liftIO $ print pSize
                                  resp <- (liftIO . getResponseFromTracker) url
                                  peersBS <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
                                  let ls =  getIPandPort peersBS    

@@ -64,25 +64,36 @@ talkToPeer peer = do --canTalk <- P.canTalkToPeer peer
                         msg <-  getMessage handle--  liftM lenAndIdToMsg lenAndId
                         case msg of
                               KeepAlive     -> loopAndWait peer "Alive" 100000
-                              UnChoke       -> unchoke peer
+                              UnChoke       -> reqNextPice peer
                               Bitfield bf -> bitfield peer bf
                               Have (pId, b) ->  have peer pId
-                              Piece (i,b,c) -> print $ "PIECE!!!!!!!!! "++ (show i) ++"  "++(show b)
+                              p@(Piece (i,b,c)) -> (print $ "got "++(show b))>>piece peer p
                               _-> loopAndWait peer (show msg) 10000
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
                      where 
                         loopAndWait peer m p=  (threadDelay p) >> (print m)>>talkToPeer peer
 
  
-unchoke :: P.Peer -> IO ()
-unchoke peer = do nextLs <- P.nextPiceToRequest peer
-                  case nextLs of
-                         []   -> print "Finisched"
-                         (x, b):xs -> (sendMsg peer $ Request (10, 16384, 16384))
-                                      >> print ("Request "++ (show x))
-                                      >> talkToPeer peer
+reqNextPice :: P.Peer -> IO ()
+reqNextPice peer = do nextLs <- P.nextPiceToRequest peer
+                      case nextLs of
+                           []        -> print "Finisched"
+                           (x, b):xs -> (print "req")>>(sendMsg peer $ Request (10, 0* 16384, 16384))
+                                            >> print ("Request "++ (show x))
+                                            >> talkToPeer peer
+                   
                    
 
+--piece :: P.Peer -> IO ()
+piece peer (Piece (i,b,c)) = do P.appendToBuffer peer c
+                                if (next>= 32*16384)
+                                then (P.appendBuffToFile peer (show i)) -- >>reqNextPice peer
+                                else (print ("Request subPice "++ (show next)))>>(sendMsg peer $ Request (i, next, 16384))
+                                           >> talkToPeer peer
+                              where next = b+16384
+                              
+                   
+                   
 bitfield :: P.Peer -> MsgPayload -> IO()
 bitfield peer bf = P.updateBF peer bf
                    >> sendInterested peer

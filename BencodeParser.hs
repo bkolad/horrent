@@ -11,6 +11,7 @@ import Data.Either
 import Control.Applicative
 import qualified Crypto.Hash.SHA1 as SHA1 (hash)
 import Control.Monad.Error
+import qualified Data.ByteString.Base16 as B16
 
 
 data BStringT = BString BC.ByteString deriving (Eq, Show)
@@ -28,6 +29,17 @@ annouce inDic =  BC.unpack <$> ((find "announce" inDic) >>= getBStr)
 
 peers :: BEncode -> Either String BC.ByteString       
 peers inDic =  ((find "peers" inDic) >>= getBStr)
+
+pieceHash :: BEncode -> Either String BC.ByteString
+pieceHash inDic = do infoDic <- find "info" inDic
+                     (BStr (BString bStr)) <- find "pieces" infoDic
+                     return bStr 
+
+splitEvery :: Int -> BC.ByteString -> [BC.ByteString]                     
+splitEvery n bc = if (BC.null bc)
+                     then []
+                     else s:(splitEvery n e)
+                  where (s,e) = BC.splitAt n bc                      
 
 piceSize :: BEncode ->Either String Int
 piceSize inDic = do  infoDic <- find "info" inDic
@@ -119,8 +131,14 @@ infoPrinter = do content <- parseFromFile "ubuntu.torrent"
                       Left e-> print e
                       Right c  -> print (toByteString c)
                                     
-                                           
+piecesPrinter::IO()
+piecesPrinter = do content <- parseFromFile "ubuntu.torrent"                                    
+                   case content>>=pieceHash of
+                      Left e-> print e
+                      Right c  -> print $ B16.encode ((splitEvery 20 c) !! 10)
 
+
+  
 prettyPrint:: BEncode -> IO()
 prettyPrint (BInt i) = putStrLn (show i)
 prettyPrint (BStr s) = putStrLn (show s)
