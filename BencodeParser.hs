@@ -1,4 +1,4 @@
-module BencodeParser (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers, piceSize, torrentSize) where
+module BencodeParser (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers, piceSize, torrentSize, piecesHashSeq) where
 
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -12,7 +12,7 @@ import Control.Applicative
 import qualified Crypto.Hash.SHA1 as SHA1 (hash)
 import Control.Monad.Error
 import qualified Data.ByteString.Base16 as B16
-
+import qualified Data.Sequence as Seq
 
 data BStringT = BString BC.ByteString deriving (Eq, Show)
 
@@ -30,16 +30,21 @@ annouce inDic =  BC.unpack <$> ((find "announce" inDic) >>= getBStr)
 peers :: BEncode -> Either String BC.ByteString       
 peers inDic =  ((find "peers" inDic) >>= getBStr)
 
-pieceHash :: BEncode -> Either String BC.ByteString
-pieceHash inDic = do infoDic <- find "info" inDic
-                     (BStr (BString bStr)) <- find "pieces" infoDic
-                     return bStr 
-
-splitEvery :: Int -> BC.ByteString -> [BC.ByteString]                     
+piecesHash :: BEncode -> Either String BC.ByteString
+piecesHash inDic = do infoDic <- find "info" inDic
+                      (BStr (BString bStr)) <- find "pieces" infoDic
+                      return bStr 
+                      
+                      
+splitEvery :: Int -> BC.ByteString->Seq.Seq BC.ByteString
 splitEvery n bc = if (BC.null bc)
-                     then []
-                     else s:(splitEvery n e)
-                  where (s,e) = BC.splitAt n bc                      
+                     then Seq.empty
+                     else s Seq.<| (splitEvery n e)
+                  where (s,e) = BC.splitAt n bc 
+
+                  
+piecesHashSeq :: BEncode -> Either String (Seq.Seq BC.ByteString)                 
+piecesHashSeq dic = (splitEvery 20) <$> piecesHash dic 
 
 piceSize :: BEncode ->Either String Int
 piceSize inDic = do  infoDic <- find "info" inDic
@@ -133,9 +138,9 @@ infoPrinter = do content <- parseFromFile "ubuntu.torrent"
                                     
 piecesPrinter::IO()
 piecesPrinter = do content <- parseFromFile "ubuntu.torrent"                                    
-                   case content>>=pieceHash of
+                   case content>>=piecesHashSeq of
                       Left e-> print e
-                      Right c  -> print $ B16.encode ((splitEvery 20 c) !! 10)
+                      Right c  -> print $ B16.encode (Seq.index c 10)
 
 
   

@@ -4,12 +4,12 @@ module PeersControler (start) where
 
 import qualified Connector as C (liftEither, makePeers) 
 import qualified Peer as P
-import Control.Concurrent.Async as Async (mapConcurrently)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Control.Exception as E
 import qualified Data.ByteString.Char8 as BC
 import qualified System.IO as SIO
+import Control.Concurrent.Async as Async (mapConcurrently)
 import Data.Word
 import Data.Binary
 import Data.Binary.Get

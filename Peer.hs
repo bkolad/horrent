@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse, FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
-module Peer (Peer, makePeer, myId, showPeer, peerP, handleP, setInterested, 
+module Peer (Peer, makePeer, showPeer, peerP, handleP, setInterested, 
 setNotVirgin, getBitFieldList, {--canTalkToPeer,--} updateBF, fromBsToInt, 
 updateBFIndex, amIInterested, bitFieldArray, nextPiceToRequest, nextBuffIdx, appendToBuffer, appendBuffToFile) where
 
@@ -19,15 +19,6 @@ import Data.List
 import Control.Applicative
 import Data.Array.MArray
 import Types
-import Data.Binary
-import Data.Binary.Get
-import Data.Binary.Put
-
-
-
-myId = "-TR2840-d0p22uiake0b" 
-protocol = "BitTorrent protocol"
-
 
 type Bitfield = TA.TArray Int Bool 
 
@@ -59,7 +50,7 @@ appendToBuffer peer content = modifyIORef (buffer peer) (\bff->bff Seq.|> conten
 
 appendBuffToFile :: Peer -> String ->IO()
 appendBuffToFile peer fN = do buff <- readIORef $ buffer peer
-                              E.bracket (SIO.openBinaryFile fN SIO.AppendMode) SIO.hClose 
+                              E.bracket (SIO.openBinaryFile ("downloads/"++fN) SIO.WriteMode) SIO.hClose 
                                         (\h->F.mapM_ (\x->BC.hPut h x) buff)
                             
   
@@ -81,10 +72,6 @@ setNotVirgin peer = modifyIORef' (amIVirgin peer) (\_->False)
 setInterested :: Peer-> IO () 
 setInterested peer = atomically $ writeTVar (amIInterested peer) True
 
---setNotInterested :: Peer-> IO () 
---setNotInterested peer = atomically $ writeTVar (amIInterested peer) False 
-
-
 
 updateBF :: Peer -> BC.ByteString -> IO ()
 updateBF peer bf = atomically $ updateArray (bitFieldArray peer) bf 
@@ -93,27 +80,18 @@ updateBFIndex :: Peer -> Int -> IO ()
 updateBFIndex peer i = atomically $  writeArray (bitFieldArray peer) i True
                                              
                           
-                          
-                       {--    
-canTalkToPeer :: Peer -> IO Bool
-canTalkToPeer peer = do isVirgin <- readIORef (amIVirgin peer)    
-                        isInterested <-readIORef (amIInterested peer)                     
-                        isIChocked <- readIORef (amIChocked peer)
-                        return $  isVirgin || (isIChocked && isInterested)               
-                        --}
---showPeer :: Peer -> IO String                  
-showPeer p= do let name = peerP p
-             --  arr <-getElems (bitFieldArray p)    
-               return name--(name, arr)
                          
-                 
-makePeer :: BC.ByteString -> N.HostName -> N.PortNumber -> Int -> GlobalPiceInfo-> IO Peer             
-makePeer hash host port size globalPiceInfo = do handle<- N.connectTo host (N.PortNumber  port)
-                                                 SIO.hSetBinaryMode handle True
-                                                 sendHandshake handle hash $ BC.pack myId
-                                                 recvHandshake handle size globalPiceInfo                                      
-                                                    
-    
+makePeer :: SIO.Handle -> String -> Int -> GlobalPiceInfo -> IO Peer
+makePeer handle peerName size globalPiceInfo = do amIVirgin <- newIORef True
+                                                  amIChocked <- newIORef True
+                                                  idx <- newIORef 32
+                                                  sq<-newIORef Seq.empty
+                                                  amIInterested <- atomically (newTVar False)
+                                                  bfArr <- makeBFArray size
+                                                  return $ Peer handle peerName amIInterested amIChocked 
+                                                                amIVirgin bfArr globalPiceInfo sq idx    
+                              
+  
 updateArray:: (MArray a Bool m, Ix i, Num i) =>a i Bool -> BC.ByteString -> m ()
 updateArray arr bs = update arr (convertToBits bs) 0   
 
@@ -133,73 +111,18 @@ fromBsToInt bs = sum $ zipWith (\x y->x*2^y) (reverse ws) [0,8..]
                  where ws = map fromIntegral (B.unpack bs)       
   
   
+--showPeer :: Peer -> IO String                  
+showPeer p= do let name = peerP p
+             --  arr <-getElems (bitFieldArray p)    
+               return name--(name, arr)
   
-  
-data Handshake = Handshake { len :: Int 
-                           , peerProtocol :: String
-                           , reserved :: B.ByteString
-                           , hash :: B.ByteString
-                           , peerName :: String
-                           }              
-  
-instance Binary Handshake where  
-  
-  put handshake = putWord8 (fromIntegral . length $ protocol) 
-               >> (putByteString $ BC.pack protocol) 
-               >> (putWord64be 0)
-               >> (putByteString $ hash handshake)
-               >> (putByteString $ BC.pack $ peerName handshake)
-  
-  
-  get = do len <- (fromBsToInt <$> getByteString 1)
-           ptr <- BC.unpack <$> getByteString len
-           rsrv <- getByteString 8
-           hash <- getByteString 20
-           peer <- BC.unpack <$> getByteString 20 
-           return $ Handshake len ptr rsrv hash peer                       
+--setNotInterested :: Peer-> IO () 
+--setNotInterested peer = atomically $ writeTVar (amIInterested peer) False 
 
-
-sendHandshake :: SIO.Handle -> B.ByteString -> B.ByteString -> IO ()
-sendHandshake handle hash peer = BL.hPutStr handle $ encode handshake -- >> print "Handshake finished"
-  where handshake = Handshake len protocol rsrv hash myId
-        len = length protocol
-        rsrv = B.replicate 8 0            
-
-getHandshake :: SIO.Handle -> IO Handshake 
-getHandshake handle =  decode <$> (BL.hGetContents handle)
- 
- {--
-recvHandshake :: SIO.Handle-> Int -> GlobalPiceInfo -> IO Peer
-recvHandshake handle size globalPiceInfo = do handshake <- getHandshake handle
-                                              amIVirgin <- newIORef True
-                                              amIChocked <- newIORef True
-                                              amIInterested <- atomically (newTVar False)
-                                              bfArr <- makeBFArray size
-                                              return $ Peer handle (peerName handshake) amIInterested amIChocked amIVirgin bfArr globalPiceInfo
- 
- --}                 
-recvHandshake :: SIO.Handle-> Int -> GlobalPiceInfo -> IO Peer
-recvHandshake handle size globalPiceInfo = do len <- B.hGet handle 1
-                                              ptr <- B.hGet handle $ fromBsToInt len
-                                              rsrv <- B.hGet handle 8
-                                              hash <- B.hGet handle 20
-                                              peer <- B.hGet handle 20 
-                                              amIVirgin <- newIORef True
-                                              amIChocked <- newIORef True
-                                              idx <- newIORef 32
-                                              sq<-newIORef Seq.empty
-                                              amIInterested <- atomically (newTVar False)
-                                              bfArr <- makeBFArray size
-                                              return $ Peer handle 
-                                                            (BC.unpack peer) 
-                                                            amIInterested 
-                                                            amIChocked 
-                                                            amIVirgin 
-                                                            bfArr 
-                                                            globalPiceInfo 
-                                                            sq
-                                                            idx
-
-                            
-                            
-               
+                       {--    
+canTalkToPeer :: Peer -> IO Bool
+canTalkToPeer peer = do isVirgin <- readIORef (amIVirgin peer)    
+                        isInterested <-readIORef (amIInterested peer)                     
+                        isIChocked <- readIORef (amIChocked peer)
+                        return $  isVirgin || (isIChocked && isInterested)               
+                        --}
