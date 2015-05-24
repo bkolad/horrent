@@ -13,6 +13,7 @@ import qualified Crypto.Hash.SHA1 as SHA1 (hash)
 import Control.Monad.Error
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.Sequence as Seq
+import Types
 
 data BStringT = BString BC.ByteString deriving (Eq, Show)
 
@@ -36,14 +37,14 @@ piecesHash inDic = do infoDic <- find "info" inDic
                       return bStr 
                       
                       
-splitEvery :: Int -> BC.ByteString->Seq.Seq BC.ByteString
+splitEvery :: Int -> BC.ByteString -> Buffer
 splitEvery n bc = if (BC.null bc)
                      then Seq.empty
                      else s Seq.<| (splitEvery n e)
                   where (s,e) = BC.splitAt n bc 
 
                   
-piecesHashSeq :: BEncode -> Either String (Seq.Seq BC.ByteString)                 
+piecesHashSeq :: BEncode -> Either String Buffer         
 piecesHashSeq dic = (splitEvery 20) <$> piecesHash dic 
 
 piceSize :: BEncode ->Either String Int

@@ -3,7 +3,7 @@
 module Connector ( liftEither, makePeers) where
 
 import qualified Peer as P (Peer, makePeer, showPeer, fromBsToInt) 
-import qualified BencodeParser as BP (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers, piceSize, torrentSize)
+import qualified BencodeParser as BP (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers, piceSize, torrentSize, piecesHashSeq)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
@@ -11,6 +11,7 @@ import qualified UrlEncoder as Encoder (urlEncodeVars)
 import qualified Data.Either as DE 
 import qualified Network as N
 import qualified Handshake as H 
+import qualified Data.Traversable as T
 import Data.Binary.Get
 import Data.Word
 import Network.HTTP.Base (urlEncodeVars)
@@ -27,19 +28,20 @@ liftEither = ErrorT . return
                       
 makePeers :: String ->Int -> ErrorT String IO [P.Peer]  
 makePeers tracker numberOfP = do torrentContent <-  liftIO $ BP.parseFromFile tracker
-                                 infoHash <- liftEither $ BC.pack<$>(torrentContent >>= BP.infoHash)
-                                 urlTracker <-   liftEither $ torrentContent >>= trackerUrl
-                                 pieceSize<- liftEither $ torrentContent >>= BP.piceSize
-                                 torrentSize<- liftEither $ torrentContent >>= BP.torrentSize
-                                 let numberOfPieces= ceiling $ ((fromIntegral torrentSize)/(fromIntegral pieceSize)) 
-                                 resp <- (liftIO . getResponseFromTracker) urlTracker
-                                 peersBS <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
+                                 infoHash    <- liftEither $ BC.pack <$> (torrentContent >>= BP.infoHash)
+                                 urlTracker  <- liftEither $ torrentContent >>= trackerUrl
+                                 pieceSize   <- liftEither $ torrentContent >>= BP.piceSize
+                                 torrentSize <- liftEither $ torrentContent >>= BP.torrentSize
+                                 piecesHash  <- liftEither $ torrentContent >>= BP.piecesHashSeq                             
+                                 let numberOfPieces= ceiling $ (fromIntegral torrentSize)/(fromIntegral pieceSize)
+                                 resp            <- (liftIO . getResponseFromTracker) urlTracker
+                                 peersBS         <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
                                  let ipsAndPorts =  getIPandPort peersBS    
-                                 globalStatus <- liftIO $ newGlobalBitField numberOfPieces
-                                 handshakes <- liftIO $ Async.mapConcurrently (\(host,port)->H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
+                                 globalStatus    <- liftIO $ newGlobalBitField numberOfPieces
+                                 handshakes      <- liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
                                  let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes
                                  liftIO $ print errorHandshakes
-                                 let peers = map (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) numberOfPieces globalStatus) correctHanshakes
+                                 let peers = map (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) numberOfPieces globalStatus piecesHash) correctHanshakes
                                  liftIO $ sequence peers
  
                              
