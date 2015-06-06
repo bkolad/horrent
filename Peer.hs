@@ -1,7 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables, DoAndIfThenElse, FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
 module Peer (Peer, makePeer, showPeer, peerP, handleP, setInterested, 
 setNotVirgin, getBitFieldList, {--canTalkToPeer,--} updateBF, fromBsToInt, 
-updateBFIndex, amIInterested, bitFieldArray, nextPiceToRequest, nextBuffIdx, appendToBuffer, appendBuffToFile, getBuffer2BS, hashes, buffer) where
+updateBFIndex, amIInterested, bitFieldArray, nextPiceToRequest, nextBuffIdx, appendToBuffer, 
+getBuffer2BS, hashes, buffer, updateStatusPending, updateStatusDone, resetStatus, clearBuffer) where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -51,15 +52,21 @@ appendToBuffer peer content = modifyIORef (buffer peer) (\bff->bff Seq.|> conten
 
 getBuffer2BS :: Buffer -> BC.ByteString
 getBuffer2BS  = F.foldr M.mappend M.mempty  
+ 
+clearBuffer peer = modifyIORef (buffer peer) (\_-> Seq.empty)
+ 
+updateStatusPending :: Int -> Peer -> IO ()
+updateStatusPending i peer = updateStatus i peer InProgress
 
 
+updateStatusDone i peer = updateStatus i peer Done
 
-appendBuffToFile :: Peer -> String ->IO()
-appendBuffToFile peer fN = do buff <- readIORef $ buffer peer
-                              E.bracket (SIO.openBinaryFile ("downloads/"++fN) SIO.WriteMode) SIO.hClose 
-                                        (\h->F.mapM_ (\x->BC.hPut h x) buff)
-                            
-  
+resetStatus i peer = updateStatus i peer NotHave
+                
+updateStatus i peer status = atomically $ writeArray (globalIndexArray peer) i status                 
+                
+                
+                
 nextPiceToRequest :: Peer -> IO [(Int, Bool)]
 nextPiceToRequest peer = do atomically $ arrayDiff (globalIndexArray peer) (bitFieldArray peer)
                           

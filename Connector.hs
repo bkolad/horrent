@@ -41,8 +41,8 @@ makePeers tracker numberOfP = do torrentContent <-  liftIO $ BP.parseFromFile tr
                                  handshakes      <- liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
                                  let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes
                                  liftIO $ print errorHandshakes
-                                 let peers = map (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) numberOfPieces globalStatus piecesHash) correctHanshakes
-                                 liftIO $ sequence peers
+                                 let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) numberOfPieces globalStatus piecesHash) correctHanshakes
+                                 liftIO $ peers
  
                              
 getResponseFromTracker :: String -> IO String

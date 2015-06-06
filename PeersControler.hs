@@ -9,8 +9,8 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Control.Exception as E
 import qualified Data.ByteString.Char8 as BC
 import qualified Message as M
-import qualified Crypto.Hash.SHA1 as SHA1 (hash)
 import Control.Concurrent.Async as Async (mapConcurrently)
+import qualified Crypto.Hash.SHA1 as SHA1 (hash)
 import qualified Data.Sequence as Seq
 import Control.Applicative
 import Control.Concurrent
@@ -41,36 +41,43 @@ talkToPeer peer = do --canTalk <- P.canTalkToPeer peer
                         msg <-  M.getMessage handle--  liftM lenAndIdToMsg lenAndId
                         case msg of
                               M.KeepAlive     -> loopAndWait peer "Alive" 100000
-                              M.UnChoke       -> reqNextPice peer
+                              M.UnChoke       -> reqNextPice peer 
                               M.Bitfield bf -> bitfield peer bf
                               M.Have (pId, b) ->  have peer pId
-                              p@(M.Piece (i,b,c)) -> (print $ "got "++(show b))>>piece peer p
+                              p@(M.Piece (i,b,c)) -> (print $ "got "++(show i)++" "++(show b))>>piece peer p
                               _-> loopAndWait peer (show msg) 10000
                      else print "Cant talk !!!!!!!!!!!!!!!!!!!!!!!!!!!"
                      where 
                         loopAndWait peer m p=  (threadDelay p) >> (print m)>>talkToPeer peer
 
  
-reqNextPice :: P.Peer -> IO ()
+reqNextPice :: P.Peer -> IO ()  -- TODO clear buffer
 reqNextPice peer = do nextLs <- P.nextPiceToRequest peer
                       case nextLs of
                            []        -> print "Finisched"
-                           (x, b):xs -> (print "req")>>(M.sendMsg peer $ M.Request (22, 0* 16384, 16384))
+                           (x, b):xs -> (print "req")>>(M.sendMsg peer $ M.Request (x, 0* 16384, 16384))
                                             >> print ("Request "++ (show x))
                                             >> talkToPeer peer
                    
                    
 
 --piece :: P.Peer -> IO ()
-piece peer (M.Piece (i,b,c)) = do P.appendToBuffer peer c
+piece peer (M.Piece (i,b,c)) = do if b == 0 then 
+                                     P.updateStatusPending i peer
+                                     else return ()
+                                  P.appendToBuffer peer c
                                   if (next>= 32*16384)
-                                  then do bf <- readIORef (P.buffer peer)
-                                          print $ (SHA1.hash (P.getBuffer2BS bf)) == (Seq.index (P.hashes peer) 22 )--(P.appendBuffToFile peer (show i)) -- >>reqNextPice peer
-                                  else (print ("Request subPice "++ (show next)))>>(M.sendMsg peer $ M.Request (i, next, 16384))
-                                            >> talkToPeer peer
+                                  then do bufferS <- readIORef $ P.buffer peer
+                                          let buff = P.getBuffer2BS bufferS
+                                          let correct = checkHashesEq peer buff i 
+                                          if correct 
+                                             then B.writeFile ("downloads/"++show i) buff>> P.clearBuffer peer >> P.updateStatusDone i peer >> reqNextPice peer
+                                             else print "Wrong Hash" >> (P.resetStatus i peer) >> P.clearBuffer peer 
+                                  else (M.sendMsg peer $ M.Request (i, next, 16384))>> talkToPeer peer
                                where next = b+16384
+                                     checkHashesEq peer buff idx = 
+                                       SHA1.hash buff == Seq.index (P.hashes peer) idx                              
                               
-                   
                    
 bitfield :: P.Peer -> M.MsgPayload -> IO()
 bitfield peer bf = P.updateBF peer bf
