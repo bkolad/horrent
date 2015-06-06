@@ -33,7 +33,9 @@ makePeers tracker numberOfP = do torrentContent <-  liftIO $ BP.parseFromFile tr
                                  pieceSize   <- liftEither $ torrentContent >>= BP.piceSize
                                  torrentSize <- liftEither $ torrentContent >>= BP.torrentSize
                                  piecesHash  <- liftEither $ torrentContent >>= BP.piecesHashSeq                             
-                                 let numberOfPieces= ceiling $ (fromIntegral torrentSize)/(fromIntegral pieceSize)
+                                -- let numberOfPieces = ceiling $ (fromIntegral torrentSize)/(fromIntegral pieceSize)         
+                                 let info@(numberOfPieces, maxP, maxLast) = getSizeInfo torrentSize pieceSize 
+                                 liftIO $ print ("nb "++ (show (numberOfPieces))++" "++(show maxP)++" "++ (show maxLast))    
                                  resp            <- (liftIO . getResponseFromTracker) urlTracker
                                  peersBS         <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
                                  let ipsAndPorts =  getIPandPort peersBS    
@@ -41,10 +43,16 @@ makePeers tracker numberOfP = do torrentContent <-  liftIO $ BP.parseFromFile tr
                                  handshakes      <- liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
                                  let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes
                                  liftIO $ print errorHandshakes
-                                 let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) numberOfPieces globalStatus piecesHash) correctHanshakes
+                                 let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) info globalStatus piecesHash) correctHanshakes
                                  liftIO $ peers
  
-                             
+ 
+getSizeInfo torrentSize pieceSize = let tSize = fromIntegral torrentSize
+                                        pSize = fromIntegral pieceSize
+                                        numberOfPieces = ceiling $ tSize / pSize
+                                        lastPSize = tSize `mod` pSize
+                                    in (numberOfPieces, pSize, lastPSize)
+  
 getResponseFromTracker :: String -> IO String
 getResponseFromTracker url = HTTP.simpleHTTP (HTTP.getRequest url) >>= HTTP.getResponseBody 
 

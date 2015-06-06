@@ -2,7 +2,7 @@
 module Peer (Peer, makePeer, showPeer, peerP, handleP, setInterested, 
 setNotVirgin, getBitFieldList, {--canTalkToPeer,--} updateBF, fromBsToInt, 
 updateBFIndex, amIInterested, bitFieldArray, nextPiceToRequest, nextBuffIdx, appendToBuffer, 
-getBuffer2BS, hashes, buffer, updateStatusPending, updateStatusDone, resetStatus, clearBuffer) where
+getBuffer2BS, hashes, buffer, updateStatusPending, updateStatusDone, resetStatus, clearBuffer, sizeInfo, readGlobalStatus) where
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -28,6 +28,7 @@ data Progress = NextId Int | Finished
 
 data Peer = Peer{ handleP :: SIO.Handle
                 , peerP :: String 
+                , sizeInfo :: (Int, Int, Int)
                 , amIInterested :: TVar Bool -- false
                 , amIChocked :: IORef Bool  -- true
                 , amIVirgin :: IORef Bool -- first time I am talking to a peer
@@ -41,7 +42,8 @@ data Peer = Peer{ handleP :: SIO.Handle
 
 newStm = atomically (newTVar False)
                    
-  
+                 
+                   
 makeBFArray ::Int-> IO Bitfield  
 makeBFArray size = atomically $ newArray (0, size-1) False  
 
@@ -58,6 +60,8 @@ clearBuffer peer = modifyIORef (buffer peer) (\_-> Seq.empty)
 updateStatusPending :: Int -> Peer -> IO ()
 updateStatusPending i peer = updateStatus i peer InProgress
 
+
+readGlobalStatus peer i = atomically $ readArray (globalIndexArray peer) i   
 
 updateStatusDone i peer = updateStatus i peer Done
 
@@ -94,14 +98,15 @@ updateBFIndex peer i = atomically $  writeArray (bitFieldArray peer) i True
                                              
                           
                          
-makePeer :: SIO.Handle -> String -> Int -> GlobalPiceInfo -> Seq.Seq BC.ByteString -> IO Peer
-makePeer handle peerName size globalPiceInfo hashes= do amIVirgin <- newIORef True
+makePeer :: SIO.Handle -> String -> (Int, Int, Int) -> GlobalPiceInfo -> Seq.Seq BC.ByteString -> IO Peer
+makePeer handle peerName info@(numberOfPieces, _, _) globalPiceInfo hashes= 
+                                                     do amIVirgin <- newIORef True
                                                         amIChocked <- newIORef True
                                                         idx <- newIORef 32
                                                         sq<-newIORef Seq.empty
                                                         amIInterested <- atomically (newTVar False)
-                                                        bfArr <- makeBFArray size
-                                                        return $ Peer handle peerName amIInterested amIChocked 
+                                                        bfArr <- makeBFArray numberOfPieces
+                                                        return $ Peer handle peerName info amIInterested amIChocked 
                                                                       amIVirgin bfArr globalPiceInfo sq idx hashes   
                                     
   
