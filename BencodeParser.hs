@@ -4,16 +4,17 @@ module BencodeParser (BEncode, annouce, infoHash, parseFromFile, parseFromBS, pe
 {-# LANGUAGE FlexibleContexts #-}
 
 import qualified Data.Attoparsec.ByteString as P
-import Data.Attoparsec.ByteString.Char8
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import Data.Either
-import Control.Applicative
 import qualified Crypto.Hash.SHA1 as SHA1 (hash)
-import Control.Monad.Error
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.Sequence as Seq
+
+import Data.Attoparsec.ByteString.Char8
+import Data.Either
+import Control.Applicative
 import Types
+import Debug.Trace
 
 data BStringT = BString BC.ByteString deriving (Eq, Show)
 
@@ -108,7 +109,7 @@ bString = do n <- num
              BString <$> (P.take (read n))
              
 bList :: P.Parser BEncode
-bList = (BList) <$> (char 'l' *> (many1 (bInt <|> (BStr <$> bString) <|> bList)) <* char 'e')                  
+bList = (BList) <$> (char 'l' *> (many1 (bInt <|> (BStr <$> bString) <|> bList <|> bDic)) <* char 'e')                  
                   
                     
 dicEntry :: P.Parser (BStringT, BEncode)
@@ -124,31 +125,44 @@ bencodeParser = bInt <|> (BStr <$> bString) <|> bList <|> bDic
 
 {--TESTS--}
 
+torrent = "tom.torrent"--"karl_marx.torrent"--"tom.torrent"--"tom.torrent" -- "karl_marx.torrent"--"tom.torrent" -- 
+
 printer::IO()
-printer = do content <- parseFromFile "ubuntu.torrent"
+printer = do content <- parseFromFile torrent
              case content of
                   Left l -> print $ "Problem with reading torrent file" ++ (show l)
-                  Right dic -> print dic  
+                  Right dic -> putStr $ prettyPrint 0 dic  
   
   
 infoPrinter::IO()
-infoPrinter = do content <- parseFromFile "ubuntu.torrent"
+infoPrinter = do content <- parseFromFile torrent
                  case content >>= (find "info") of
                       Left e-> print e
                       Right c  -> print (toByteString c)
                                     
 piecesPrinter::IO()
-piecesPrinter = do content <- parseFromFile "ubuntu.torrent"                                    
+piecesPrinter = do content <- parseFromFile torrent                                   
                    case content>>=piecesHashSeq of
                       Left e-> print e
                       Right c  -> print $ B16.encode (Seq.index c 10)
 
+ 
+emptySpace n =  concat $ replicate n "  "
 
-  
-prettyPrint:: BEncode -> IO()
-prettyPrint (BInt i) = putStrLn (show i)
-prettyPrint (BStr s) = putStrLn (show s)
-prettyPrint (BList []) = return ()
-prettyPrint (BList (x:xs)) = (prettyPrint x) >>= (\_->prettyPrint (BList xs))
-prettyPrint (BDic []) = return ()
-prettyPrint (BDic ((key, value):xs)) = prettyPrint (BStr key)  >>= (\_->prettyPrint (value))  >>= (\_->prettyPrint (BDic xs)) 
+
+nl = ("\n")
+
+prettyPrint :: Int -> BEncode -> String
+prettyPrint n (BInt i) = show i
+prettyPrint n (BStr (BString s)) = show s
+prettyPrint n (BList []) = ""
+prettyPrint n (BList (x:xs)) = nl ++ (emptySpace (n+3)) 
+                                   ++ (prettyPrint (n+1) x)  
+                                   ++ (prettyPrint n (BList xs)) 
+prettyPrint n (BDic []) = ""
+prettyPrint n (BDic ((BString key, value):xs)) = nl ++ (emptySpace n) 
+                                                     ++ (show key) ++ " ::-> " 
+                                                     ++ (prettyPrint (n+1) value)  
+                                                     ++ (prettyPrint n (BDic xs)) 
+
+

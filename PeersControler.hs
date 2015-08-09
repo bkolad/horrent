@@ -54,9 +54,10 @@ reqNextPice :: P.Peer -> IO ()  -- TODO clear buffer
 reqNextPice peer = do nextLs <- P.nextPiceToRequest peer
                       case nextLs of
                            []        -> print "Finisched"
-                           (x, b):xs -> (M.sendMsg peer $ M.Request (x, 0, 16384))
-                                        >> print ("Request "++ (show x)++"  "++ (P.peerP peer))
+                           (x, b):xs -> (M.sendMsg peer $ M.Request (x, 0, maxS))
+                                        >> print ("Request "++ (show x)++"  "++ (P.peerP peer)++" "++(show maxS))
                                         >> talkToPeer peer
+                                        where maxS = maxSize peer x
                    
 maxSize peer i = if (i < (nbOfPeers-1)  ) then
                     maxSize
@@ -70,8 +71,8 @@ piece peer (M.Piece (i,b,c)) = do if b == 0 then
                                      P.updateStatusPending i peer
                                      else return ()
                                   P.appendToBuffer peer c
-                                  let maxS = maxSize peer i
-                                  if (next>= maxS) 
+                                 -- print ("Req "++ ( show maxS))
+                                  if (next >= maxS) 
                                      then do bufferS <- readIORef $ P.buffer peer
                                              let buff = P.getBuffer2BS bufferS
                                              let correct = checkHashesEq peer buff i 
@@ -85,8 +86,10 @@ piece peer (M.Piece (i,b,c)) = do if b == 0 then
                                                         print $ "before update " ++ (show gs1) ++ "  afterUpdate  " ++(show gs2)
                                                         reqNextPice peer 
                                                 else print "HASH NOT CORRECT"
-                                    else (M.sendMsg peer $ M.Request (i, next, 16384)) >> (talkToPeer peer)  
-                               where next = b+16384
+                                    else (M.sendMsg peer $ M.Request (i, next, maxS)) >> (talkToPeer peer)  
+                               where    
+                                     maxS = maxSize peer i
+                                     next = b+maxS
                                      checkHashesEq peer buff idx = 
                                                    SHA1.hash buff == Seq.index (P.hashes peer) idx                              
                               
