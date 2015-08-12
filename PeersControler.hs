@@ -51,7 +51,7 @@ talkToPeer peer = do --canTalk <- P.canTalkToPeer peer
 
  
 reqNextPice :: P.Peer -> IO ()  -- TODO clear buffer
-reqNextPice peer = do nextLs <- P.nextPiceToRequest peer
+reqNextPice peer = do nextLs <- P.nextPiceToRequest peer  -- TODO change status to Req, return MAYBE
                       case nextLs of
                            []        -> print "Finisched"
                            (x, b):xs -> (M.sendMsg peer $ M.Request (x, 0, maxS))
@@ -71,7 +71,6 @@ piece peer (M.Piece (i,b,c)) = do if b == 0 then
                                      P.updateStatusPending i peer
                                      else return ()
                                   P.appendToBuffer peer c
-                                 -- print ("Req "++ ( show maxS))
                                   if (next >= maxS) 
                                      then do bufferS <- readIORef $ P.buffer peer
                                              let buff = P.getBuffer2BS bufferS
@@ -80,10 +79,7 @@ piece peer (M.Piece (i,b,c)) = do if b == 0 then
                                                 then do B.writeFile ("downloads/"++show i) buff
                                                         print ("DOWNLOADED  " ++show i ++"   "++ (P.peerP peer))
                                                         P.clearBuffer peer
-                                                        gs1 <- (P.readGlobalStatus peer i)
                                                         P.updateStatusDone i peer
-                                                        gs2 <- (P.readGlobalStatus peer i)
-                                                        print $ "before update " ++ (show gs1) ++ "  afterUpdate  " ++(show gs2)
                                                         reqNextPice peer 
                                                 else print "HASH NOT CORRECT"
                                     else (M.sendMsg peer $ M.Request (i, next, maxS)) >> (talkToPeer peer)  

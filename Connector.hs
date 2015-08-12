@@ -33,7 +33,6 @@ makePeers tracker numberOfP = do torrentContent <-  liftIO $ BP.parseFromFile tr
                                  pieceSize   <- liftEither $ torrentContent >>= BP.piceSize
                                  torrentSize <- liftEither $ torrentContent >>= BP.torrentSize
                                  piecesHash  <- liftEither $ torrentContent >>= BP.piecesHashSeq                             
-                                -- let numberOfPieces = ceiling $ (fromIntegral torrentSize)/(fromIntegral pieceSize)         
                                  let info@(numberOfPieces, maxP, maxLast) = getSizeInfo torrentSize pieceSize 
                                  liftIO $ print ("nb "++ (show torrentSize) ++ " "++(show numberOfPieces)++" "++(show maxP)++" "++ (show maxLast))    
                                  resp            <- (liftIO . getResponseFromTracker) urlTracker
