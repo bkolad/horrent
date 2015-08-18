@@ -15,7 +15,8 @@ import qualified Data.Sequence as Seq
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
-import Control.Monad.Error
+import Control.Monad.Except
+import Control.Monad.Trans.Except
 import Control.Concurrent.STM
 import Data.Array.MArray
 import Data.IORef
@@ -23,7 +24,7 @@ import Data.IORef
                        
                           
                           
-start :: String -> Int -> ErrorT String IO [P.Peer]                     
+start :: String -> Int -> ExceptT String IO [P.Peer]                     
 start tracker n= do peers <- C.makePeers tracker n 
                     liftIO $ Async.mapConcurrently talk peers
                     return peers

@@ -12,7 +12,7 @@ import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
 import Control.Applicative
-import Control.Monad.Error
+import Control.Monad.Except
 
 data Handshake = Handshake { len :: Int 
                            , peerProtocol :: String

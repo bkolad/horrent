@@ -18,15 +18,16 @@ import Network.HTTP.Base (urlEncodeVars)
 import Network.HTTP as HTTP
 import Control.Concurrent.Async as Async (mapConcurrently)
 import Control.Applicative
-import Control.Monad.Error
+import Control.Monad.Trans.Except
+import Control.Monad.IO.Class (liftIO)
 import Types
 
 
 
-liftEither = ErrorT . return
+liftEither = ExceptT . return
 
                       
-makePeers :: String ->Int -> ErrorT String IO [P.Peer]  
+makePeers :: String ->Int -> ExceptT String IO [P.Peer]  
 makePeers tracker numberOfP = do torrentContent <-  liftIO $ BP.parseFromFile tracker
                                  infoHash    <- liftEither $ BC.pack <$> (torrentContent >>= BP.infoHash)
                                  urlTracker  <- liftEither $ torrentContent >>= trackerUrl
