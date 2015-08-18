@@ -5,7 +5,7 @@ description:         Please see README.md
 homepage:            http://github.com/name/project
 license:             BSD3
 license-file:        LICENSE
-author:              Your name here
+author:              Blazej Kolad
 maintainer:          your.address@example.com
 -- copyright:           
 category:            Web
@@ -15,22 +15,9 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     BencodeParser, Connector, Handshake, Message, Peer, PeersControler, Types, UrlEncoder
+  exposed-modules:     BencodeParser, Types
   build-depends:       base >= 4.7 && < 5
-                     , bytestring ==0.10.*
-                     , binary ==0.7.*
-                     , HTTP ==4000.2.*
-                     , network ==2.6.*
-                     , async ==2.0.*
-                     , base16-bytestring ==0.1.*
-                     , attoparsec ==0.12.*
-                     , cryptohash ==0.11.*
-                     , stm ==2.4.*
-                     , containers ==0.5.*
-                     , mtl ==2.2.*
-                     , array ==0.5.1.*
-                     , transformers ==0.4.2.*
-
+                   
   default-language:    Haskell2010
 
 executable horrent-exec
@@ -44,6 +31,16 @@ executable horrent-exec
                      , mtl ==2.2.*
                      , data-ordlist ==0.4.7.*
                      , transformers ==0.4.2.*
+                     , array ==0.5.1.*
+                     , attoparsec ==0.12.*
+                     , stm ==2.4.*
+                     , containers ==0.5.*
+                     , base16-bytestring ==0.1.*
+                     , cryptohash ==0.11.*
+                     , async ==2.0.*
+                     , network ==2.6.*
+                     , binary ==0.7.*
+                     , HTTP ==4000.2.*
 
 
   default-language:    Haskell2010
