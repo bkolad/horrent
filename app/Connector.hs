@@ -43,7 +43,13 @@ makePeers tracker numberOfP =
 
 
  
-getSizeInfo :: BP.BEncode -> Either String (Int, Int, Int)
+type NumberOfPieces = Int
+type NormalPieceSize = Int
+type LastPieceSize = Int
+
+
+
+getSizeInfo :: BP.BEncode -> Either String (NumberOfPieces, NormalPieceSize, LastPieceSize)
 getSizeInfo torrentContent = 
     do pieceSize   <-  BP.piceSize torrentContent
        torrentSize <-  BP.torrentSize torrentContent           
