@@ -40,7 +40,6 @@ makePeers tracker numberOfP =
        piecesHash  <- liftEither $ BP.piecesHashSeq torrentContent                         
        let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) info globalStatus piecesHash) correctHanshakes
        liftIO $ peers
- 
 
 
  
@@ -73,7 +72,6 @@ peersIpAndPortsFromTracker torrentContent =
 getResponseFromTracker :: String -> IO String
 getResponseFromTracker url = HTTP.simpleHTTP (HTTP.getRequest url) 
                              >>= HTTP.getResponseBody 
-
                              
                              
                              
@@ -93,9 +91,7 @@ trackerUrl fromDic =
                                        ("event", "started")]         
 
                 
-                
-                
-                 
+                                 
 getIPandPort :: B.ByteString -> [(N.HostName, N.PortNumber)]                                                                                               
 getIPandPort bs = runGet get32and16b (BL.fromChunks [bs])                                                                                             
          where get32and16b :: Get [(N.HostName, N.PortNumber)]
