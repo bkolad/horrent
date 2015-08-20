@@ -31,16 +31,16 @@ makePeers tracker numberOfP =
      
        ipsAndPorts <- peersIpAndPortsFromTracker torrentContent    
      
-       infoHash    <- liftEither $ BC.pack <$> (BP.infoHash torrentContent)
-       liftIO $ print $ "Number of avaliable peers " ++ (show $ length ipsAndPorts) 
+       infoHash    <- liftEither $ BC.pack <$> BP.infoHash torrentContent
+       liftIO $ print $ "Number of avaliable peers " ++ show (length ipsAndPorts) 
        handshakes      <- liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
        let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes                                     
-       liftIO $ print $ "Error H "++ (show errorHandshakes)
-       liftIO $ print $ "Correct H "++ (show correctHanshakes)
+       liftIO $ print $ "Error H "++ show errorHandshakes
+       liftIO $ print $ "Correct H "++ show correctHanshakes
                                  
        piecesHash  <- liftEither $ BP.piecesHashSeq torrentContent                         
        let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) info globalStatus piecesHash) correctHanshakes
-       liftIO $ peers
+       liftIO peers
 
 
  
@@ -70,7 +70,7 @@ peersIpAndPortsFromTracker :: BP.BEncode -> ExceptT String IO [(N.HostName, N.Po
 peersIpAndPortsFromTracker torrentContent = 
     do urlTracker  <- liftEither $ trackerUrl torrentContent
        resp <- liftIO . getResponseFromTracker $ urlTracker
-       peersBS <- liftEither $ (BP.parseFromBS . BC.pack $ resp)  >>= BP.peers
+       peersBS <- liftEither $ (BP.parseFromBS . BC.pack $ resp) >>= BP.peers
        let ipsAndPorts =  getIPandPort peersBS
        return ipsAndPorts
   
