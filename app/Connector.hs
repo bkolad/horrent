@@ -20,7 +20,7 @@ import Control.Concurrent.Async as Async (mapConcurrently)
 import Control.Applicative
 import Types
 
-            
+type TorrentContent = BP.BEncode            
             
 makePeers :: String ->Int -> ExceptT String IO [P.Peer]  
 makePeers tracker numberOfP = 
@@ -49,7 +49,7 @@ type NormalPieceSize = Int
 type LastPieceSize = Int
 
 
-getSizeInfo :: BP.BEncode -> Either String (NumberOfPieces, NormalPieceSize, LastPieceSize)
+getSizeInfo :: TorrentContent -> Either String (NumberOfPieces, NormalPieceSize, LastPieceSize)
 getSizeInfo torrentContent = 
     do pieceSize   <-  BP.piceSize torrentContent
        torrentSize <-  BP.torrentSize torrentContent           
@@ -65,7 +65,7 @@ getSizeInfo torrentContent =
   
 
   
-peersIpAndPortsFromTracker :: BP.BEncode -> ExceptT String IO [(N.HostName, N.PortNumber)]
+peersIpAndPortsFromTracker :: TorrentContent -> ExceptT String IO [(N.HostName, N.PortNumber)]
 peersIpAndPortsFromTracker torrentContent = 
     do urlTracker  <- liftEither $ trackerUrl torrentContent
        resp <- liftIO . getResponseFromTracker $ urlTracker
@@ -76,18 +76,15 @@ peersIpAndPortsFromTracker torrentContent =
        
        
 type TrackerResponse = String       
+type URL = String                             
   
   
-getResponseFromTracker :: String -> IO TrackerResponse
+getResponseFromTracker :: URL -> IO TrackerResponse
 getResponseFromTracker url = HTTP.simpleHTTP (HTTP.getRequest url) 
                              >>= HTTP.getResponseBody 
                              
 
-                             
-type URL = String                             
-
-
-trackerUrl :: BP.BEncode -> Either String URL
+trackerUrl :: TorrentContent -> Either String URL
 trackerUrl fromDic = 
          do ann <- BP.annouce fromDic
             vars <- encodedVars <$> (BP.infoHash fromDic)
