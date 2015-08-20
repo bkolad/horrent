@@ -2,7 +2,7 @@
 module Main where
 import PeersControler (start)
 import Peer (showPeer)
-import Control.Monad.Except
+import Types
 import System.Directory
 import qualified Data.List as L
 import Data.List.Ordered

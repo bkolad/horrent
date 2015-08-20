@@ -18,42 +18,54 @@ import Network.HTTP.Base (urlEncodeVars)
 import Network.HTTP as HTTP
 import Control.Concurrent.Async as Async (mapConcurrently)
 import Control.Applicative
-import Control.Monad.Trans.Except
-import Control.Monad.IO.Class (liftIO)
 import Types
-
-
-
-liftEither = ExceptT . return
 
                       
 makePeers :: String ->Int -> ExceptT String IO [P.Peer]  
-makePeers tracker numberOfP = do torrentContent <-  liftIO $ BP.parseFromFile tracker
-                                 infoHash    <- liftEither $ BC.pack <$> (torrentContent >>= BP.infoHash)
-                                 urlTracker  <- liftEither $ torrentContent >>= trackerUrl
-                                 pieceSize   <- liftEither $ torrentContent >>= BP.piceSize
-                                 torrentSize <- liftEither $ torrentContent >>= BP.torrentSize
-                                 piecesHash  <- liftEither $ torrentContent >>= BP.piecesHashSeq                             
-                                 let info@(numberOfPieces, maxP, maxLast) = getSizeInfo torrentSize pieceSize 
-                                 liftIO $ print ("nb "++ (show torrentSize) ++ " "++(show numberOfPieces)++" "++(show maxP)++" "++ (show maxLast))    
-                                 resp            <- (liftIO . getResponseFromTracker) urlTracker
-                                 peersBS         <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
-                                 let ipsAndPorts =  getIPandPort peersBS    
-                                 liftIO $ print $ "Number of avaliable peers" ++ (show $ length ipsAndPorts)    
-                                 globalStatus    <- liftIO $ newGlobalBitField numberOfPieces
-                                 handshakes      <- liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
-                                 let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes
-                                 liftIO $ print $ "Error H "++ (show errorHandshakes)
-                                 liftIO $ print $ "Correct H "++ (show correctHanshakes)
-                                 let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) info globalStatus piecesHash) correctHanshakes
-                                 liftIO $ peers
+makePeers tracker numberOfP = 
+         do torrentContent <-  BP.parseFromFile tracker
+            info@(numberOfPieces, maxP, maxLast) <- liftEither $ getSizeInfo torrentContent           
+            --liftIO $ print ("nb "++ (show torrentSize) ++ " "++(show numberOfPieces)++" "++(show maxP)++" "++ (show maxLast))                                                    
+            globalStatus    <- liftIO $ newGlobalBitField numberOfPieces
+                                 
+            infoHash    <- liftEither $ BC.pack <$> (BP.infoHash torrentContent)
+            ipsAndPorts <- getPeersIpAndPortsFromTracker torrentContent    
+            liftIO $ print $ "Number of avaliable peers " ++ (show $ length ipsAndPorts) 
+            handshakes      <- liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
+            let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes                                     
+            liftIO $ print $ "Error H "++ (show errorHandshakes)
+            liftIO $ print $ "Correct H "++ (show correctHanshakes)
+                                 
+            piecesHash  <- liftEither $ BP.piecesHashSeq torrentContent                         
+            let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) info globalStatus piecesHash) correctHanshakes
+            liftIO $ peers
  
+
+
  
-getSizeInfo torrentSize pieceSize = let tSize = fromIntegral torrentSize
-                                        pSize = fromIntegral pieceSize
-                                        numberOfPieces = ceiling $ tSize / pSize
-                                        lastPSize = tSize `mod` pSize
-                                    in (numberOfPieces, pSize, lastPSize)
+getSizeInfo :: BP.BEncode -> Either String (Int, Int, Int)
+getSizeInfo torrentContent = 
+         do pieceSize   <-  BP.piceSize torrentContent
+            torrentSize <-  BP.torrentSize torrentContent           
+            let info@(numberOfPieces, maxP, maxLast) = getSizeI torrentSize pieceSize  
+            return info
+
+getSizeI torrentSize pieceSize = 
+         let tSize = fromIntegral torrentSize
+             pSize = fromIntegral pieceSize
+             numberOfPieces = ceiling $ tSize / pSize
+             lastPSize = tSize `mod` pSize
+         in (numberOfPieces, pSize, lastPSize)
+  
+
+getPeersIpAndPortsFromTracker :: BP.BEncode -> ExceptT String IO [(N.HostName, N.PortNumber)]
+getPeersIpAndPortsFromTracker torrentContent = 
+          do urlTracker  <- liftEither $ trackerUrl torrentContent
+             resp <- liftIO . getResponseFromTracker $ urlTracker
+             peersBS <- liftEither $ (BP.parseFromBS . BC.pack $ resp)  >>= BP.peers
+             let ipsAndPorts =  getIPandPort peersBS
+             return ipsAndPorts
+  
   
 getResponseFromTracker :: String -> IO String
 getResponseFromTracker url = HTTP.simpleHTTP (HTTP.getRequest url) >>= HTTP.getResponseBody 

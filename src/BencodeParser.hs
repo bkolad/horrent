@@ -62,8 +62,9 @@ torrentSize inDic = do infoDic <- find "info" inDic
 infoHash :: BEncode -> Either String String
 infoHash inDic = (BC.unpack . SHA1.hash . toByteString) <$> (find "info" inDic) 
 
-parseFromFile::String -> IO (Either String BEncode)
-parseFromFile path = B.readFile path >>= \x-> return $ P.parseOnly bencodeParser x
+parseFromFile :: String ->  ExceptT String IO BEncode 
+parseFromFile path = do content <- liftIO $ B.readFile path
+                        liftEither $ P.parseOnly bencodeParser content
 
 
 parseFromBS :: B.ByteString -> Either String BEncode
@@ -127,21 +128,21 @@ bencodeParser = bInt <|> (BStr <$> bString) <|> bList <|> bDic
 
 torrent = "tom.torrent"--"karl_marx.torrent"--"tom.torrent"--"tom.torrent" -- "karl_marx.torrent"--"tom.torrent" -- 
 
-printer::IO()
-printer = do content <- parseFromFile torrent
+printer:: IO()
+printer = do content <- runExceptT $ parseFromFile torrent
              case content of
                   Left l -> print $ "Problem with reading torrent file" ++ (show l)
                   Right dic -> putStr $ prettyPrint 0 dic  
   
   
 infoPrinter::IO()
-infoPrinter = do content <- parseFromFile torrent
+infoPrinter = do content <- runExceptT $ parseFromFile torrent
                  case content >>= (find "info") of
                       Left e-> print e
                       Right c  -> print (toByteString c)
                                     
 piecesPrinter::IO()
-piecesPrinter = do content <- parseFromFile torrent                                   
+piecesPrinter = do content <- runExceptT $ parseFromFile torrent                                   
                    case content>>=piecesHashSeq of
                       Left e-> print e
                       Right c  -> print $ B16.encode (Seq.index c 10)
