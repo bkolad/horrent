@@ -1,4 +1,11 @@
-module Types (GlobalPiceInfo, newGlobalBitField, PiceInfo(..), Buffer, liftEither, ExceptT, liftIO, runExceptT) where
+module Types (GlobalPiceInfo
+              ,newGlobalBitField
+              ,PiceInfo(..)
+              ,Buffer
+              ,liftEither
+              ,ExceptT
+              ,liftIO
+              ,runExceptT) where
 
 
 import qualified Control.Concurrent.STM.TArray as TA

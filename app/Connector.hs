@@ -28,9 +28,10 @@ makePeers tracker numberOfP =
        info@(numberOfPieces, maxP, maxLast) <- liftEither $ getSizeInfo torrentContent           
        --liftIO $ print ("nb "++ (show torrentSize) ++ " "++(show numberOfPieces)++" "++(show maxP)++" "++ (show maxLast))                                                    
        globalStatus    <- liftIO $ newGlobalBitField numberOfPieces
-                                 
-       infoHash    <- liftEither $ BC.pack <$> (BP.infoHash torrentContent)
+     
        ipsAndPorts <- peersIpAndPortsFromTracker torrentContent    
+     
+       infoHash    <- liftEither $ BC.pack <$> (BP.infoHash torrentContent)
        liftIO $ print $ "Number of avaliable peers " ++ (show $ length ipsAndPorts) 
        handshakes      <- liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
        let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes                                     
