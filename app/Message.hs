@@ -8,6 +8,7 @@ import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
 import Control.Applicative
+import Debug.Trace
 
 
 
@@ -59,7 +60,10 @@ instance Binary Message where
             if (numBytes == 0)
                then return KeepAlive
                else do idx <- getWord8
-                       let size = numBytes -1  
+                       
+                       let size =  numBytes -1 
+                                   
+                                      
                        bs <- getByteString size
                        case idx of
                              0 -> return Choke

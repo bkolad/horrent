@@ -21,11 +21,13 @@ import Control.Concurrent.STM
 import Data.Array.MArray
 import Data.IORef
   
-                       
+--"Request 9  -DE1360-RUby~KI.D3!3 16384"
+-- "DOWNLOADED  9   -DE1360-RUby~KI.D3!3"                       
                           
                           
 start :: String -> Int -> ExceptT String IO [P.Peer]                     
 start tracker n= do peers <- C.makePeers tracker n 
+                    liftIO $ print peers
                     liftIO $ Async.mapConcurrently talk peers
                     return peers
       
@@ -39,6 +41,8 @@ talkToPeer peer = do --canTalk <- P.canTalkToPeer peer
                      if (True) then do
                         let handle = P.handleP peer
                         msg <-  M.getMessage handle--  liftM lenAndIdToMsg lenAndId
+                        
+                        
                         case msg of
                               M.KeepAlive     -> loopAndWait peer "Alive" 100000
                               M.UnChoke       -> reqNextPice peer 
@@ -94,7 +98,7 @@ piece peer (M.Piece (i,b,c)) = do if b == 0 then
 bitfield :: P.Peer -> M.MsgPayload -> IO()
 bitfield peer bf = P.updateBF peer bf
                    >> sendInterested peer
-                   >> print "Got BF" >> (talkToPeer peer)
+                   >> print ("Got BF  "++ (show bf)) >> (talkToPeer peer)
 
 
 have :: P.Peer->Int ->IO()

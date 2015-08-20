@@ -21,6 +21,9 @@ data Handshake = Handshake { len :: Int
                            , peerName :: String
                            }              
   
+instance Show Handshake where
+  show h = peerName h  
+  
 myId = "-TR2840-d0p22uiake0b" 
 protocol = "BitTorrent protocol"  
   
@@ -43,11 +46,12 @@ instance Binary Handshake where
 
 getHandshakes:: B.ByteString -> N.HostName -> N.PortNumber -> IO (Either String (SIO.Handle, Handshake))           
 getHandshakes hash host port =  E.catch (liftM Right $ handshakes hash host port)
-                                     (\(e::SomeException) -> return . Left $ (show e) ++" "++ (show host))              
+                                     (\(e::SomeException) -> return . Left $ ("EEE "++ (show e)) ++" "++ (show host))              
            
 handshakes:: B.ByteString -> N.HostName -> N.PortNumber -> IO (SIO.Handle, Handshake)           
 handshakes hash host port = do handle<- N.connectTo host (N.PortNumber  port)
-                               SIO.hSetBinaryMode handle True
+                              -- SIO.hSetBinaryMode handle True
+                               SIO.hSetBuffering handle SIO.NoBuffering
                                sendHandshake handle hash $ BC.pack myId
                                handshake <-recvHandshake handle            
                                return (handle, handshake)

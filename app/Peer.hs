@@ -40,6 +40,9 @@ data Peer = Peer{ handleP :: SIO.Handle
                 } 
                 
 
+instance Show Peer where
+  show p = (peerP p) 
+                
 newStm = atomically (newTVar False)
                    
                  
@@ -130,9 +133,9 @@ fromBsToInt bs = sum $ zipWith (\x y->x*2^y) (reverse ws) [0,8..]
   
   
 --showPeer :: Peer -> IO String                  
-showPeer p= do let name = peerP p
-             --  arr <-getElems (bitFieldArray p)    
-               return name--(name, arr)
+showPeer p= do buff <- getBitFieldList p
+               let name = peerP p
+               return (name, buff)--(name, arr)
   
 --setNotInterested :: Peer-> IO () 
 --setNotInterested peer = atomically $ writeTVar (amIInterested peer) False 

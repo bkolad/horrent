@@ -39,10 +39,12 @@ makePeers tracker numberOfP = do torrentContent <-  liftIO $ BP.parseFromFile tr
                                  resp            <- (liftIO . getResponseFromTracker) urlTracker
                                  peersBS         <- liftEither $ ((BP.parseFromBS . BC.pack) resp)  >>= BP.peers
                                  let ipsAndPorts =  getIPandPort peersBS    
+                                 liftIO $ print $ "Number of avaliable peers" ++ (show $ length ipsAndPorts)    
                                  globalStatus    <- liftIO $ newGlobalBitField numberOfPieces
                                  handshakes      <- liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
                                  let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes
-                                 liftIO $ print errorHandshakes
+                                 liftIO $ print $ "Error H "++ (show errorHandshakes)
+                                 liftIO $ print $ "Correct H "++ (show correctHanshakes)
                                  let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) info globalStatus piecesHash) correctHanshakes
                                  liftIO $ peers
  

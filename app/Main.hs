@@ -12,7 +12,7 @@ import qualified Control.Monad as M
 import Control.Applicative
 
 main::IO() 
-main = do result <-runExceptT $ start "tom.torrent" 20 --"karl_marx.torrent" 1
+main = do result <-runExceptT $ start "tom.torrent" 5 --"karl_marx.torrent" 1
           case result of
                Left s -> print s
                Right ps -> do ls<-mapM showPeer ps
