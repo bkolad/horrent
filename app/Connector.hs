@@ -49,7 +49,6 @@ type NormalPieceSize = Int
 type LastPieceSize = Int
 
 
-
 getSizeInfo :: BP.BEncode -> Either String (NumberOfPieces, NormalPieceSize, LastPieceSize)
 getSizeInfo torrentContent = 
     do pieceSize   <-  BP.piceSize torrentContent
@@ -73,16 +72,22 @@ peersIpAndPortsFromTracker torrentContent =
        peersBS <- liftEither $ (BP.parseFromBS . BC.pack $ resp) >>= BP.peers
        let ipsAndPorts =  getIPandPort peersBS
        return ipsAndPorts
+
+       
+       
+type TrackerResponse = String       
   
   
-  
-getResponseFromTracker :: String -> IO String
+getResponseFromTracker :: String -> IO TrackerResponse
 getResponseFromTracker url = HTTP.simpleHTTP (HTTP.getRequest url) 
                              >>= HTTP.getResponseBody 
                              
+
                              
-                             
-trackerUrl :: BP.BEncode -> Either String String
+type URL = String                             
+
+
+trackerUrl :: BP.BEncode -> Either String URL
 trackerUrl fromDic = 
          do ann <- BP.annouce fromDic
             vars <- encodedVars <$> (BP.infoHash fromDic)
