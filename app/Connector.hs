@@ -14,6 +14,7 @@ import qualified Handshake as H
 import qualified Data.Traversable as T
 import Data.Binary.Get
 import Data.Word
+import qualified System.IO as SIO
 import Network.HTTP.Base (urlEncodeVars)
 import Network.HTTP as HTTP
 import Control.Concurrent.Async as Async (mapConcurrently)
@@ -21,28 +22,38 @@ import Control.Applicative
 import Types
 
 type TorrentContent = BP.BEncode            
-            
+          
+          
+          
+logMsg a = liftIO $ print a          
+          
+          
+          
 makePeers :: String ->Int -> ExceptT String IO [P.Peer]  
 makePeers tracker numberOfP = 
     do torrentContent <-  BP.parseFromFile tracker
        info@(numberOfPieces, maxP, maxLast) <- liftEither $ getSizeInfo torrentContent           
-       --liftIO $ print ("nb "++ (show torrentSize) ++ " "++(show numberOfPieces)++" "++(show maxP)++" "++ (show maxLast))                                                    
-       globalStatus    <- liftIO $ newGlobalBitField numberOfPieces
-     
-       ipsAndPorts <- peersIpAndPortsFromTracker torrentContent    
-     
-       infoHash    <- liftEither $ BC.pack <$> BP.infoHash torrentContent
-       liftIO $ print $ "Number of avaliable peers " ++ show (length ipsAndPorts) 
-       handshakes      <- liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) (take numberOfP ipsAndPorts)
+       globalStatus    <- liftIO $ newGlobalBitField numberOfPieces     
+       ipsAndPorts <- peersIpAndPortsFromTracker torrentContent         
+       infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
+       logMsg $ "Number of avaliable peers " ++ show (length ipsAndPorts) 
+       handshakes <- liftIO $ getHandshakes infoHash (take numberOfP ipsAndPorts)
        let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes                                     
-       liftIO $ print $ "Error H "++ show errorHandshakes
-       liftIO $ print $ "Correct H "++ show correctHanshakes
-                                 
+       logMsg $ "Handshakes with Error "++ show errorHandshakes
+       logMsg $ "Correct Handshakes "++ show correctHanshakes
+       
+       -- ----                    
+       
        piecesHash  <- liftEither $ BP.piecesHashSeq torrentContent                         
        let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) info globalStatus piecesHash) correctHanshakes
        liftIO peers
 
+       
+getHandshakes :: BC.ByteString -> [(N.HostName, N.PortNumber)] -> IO ([(Either String (SIO.Handle, H.Handshake))])     
+getHandshakes infoHash ipsAndPorts = 
+    liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) ipsAndPorts  
 
+ 
  
 type NumberOfPieces = Int
 type NormalPieceSize = Int
@@ -51,17 +62,17 @@ type LastPieceSize = Int
 
 getSizeInfo :: TorrentContent -> Either String (NumberOfPieces, NormalPieceSize, LastPieceSize)
 getSizeInfo torrentContent = 
-    do pieceSize   <-  BP.piceSize torrentContent
-       torrentSize <-  BP.torrentSize torrentContent           
+    do pieceSize   <- BP.piceSize torrentContent
+       torrentSize <- BP.torrentSize torrentContent           
        let info@(nP, maxP, maxLast) = getSizeData torrentSize pieceSize  
        return info
     where
-         getSizeData torrentSize pieceSize = 
-              let tSize = fromIntegral torrentSize
-                  pSize = fromIntegral pieceSize
-                  numberOfPieces = ceiling $ tSize / pSize
-                  lastPSize = tSize `mod` pSize
-              in (numberOfPieces, pSize, lastPSize)
+          getSizeData torrentSize pieceSize = 
+               let tSize = fromIntegral torrentSize
+                   pSize = fromIntegral pieceSize
+                   numberOfPieces = ceiling $ tSize / pSize
+                   lastPSize = tSize `mod` pSize
+               in (numberOfPieces, pSize, lastPSize)
   
 
   
@@ -89,7 +100,8 @@ trackerUrl fromDic =
          do ann <- BP.annouce fromDic
             vars <- encodedVars <$> (BP.infoHash fromDic)
             return $ ann++"?"++vars
-         where encodedVars hash = 
+         where 
+               encodedVars hash = 
                 Encoder.urlEncodeVars [("info_hash", hash),
                                        ("peer_id", H.myId),
                                        ("left", "1000000000"),
@@ -103,7 +115,8 @@ trackerUrl fromDic =
                                  
 getIPandPort :: B.ByteString -> [(N.HostName, N.PortNumber)]                                                                                               
 getIPandPort bs = runGet get32and16b (BL.fromChunks [bs])                                                                                             
-         where get32and16b :: Get [(N.HostName, N.PortNumber)]
+         where 
+               get32and16b :: Get [(N.HostName, N.PortNumber)]
                get32and16b = do empty <- isEmpty
                                 if empty
                                 then return [] 

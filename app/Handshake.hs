@@ -44,9 +44,12 @@ instance Binary Handshake where
            return $ Handshake len ptr rsrv hash peer                       
 
 
+           
 getHandshakes:: B.ByteString -> N.HostName -> N.PortNumber -> IO (Either String (SIO.Handle, Handshake))           
 getHandshakes hash host port =  E.catch (liftM Right $ handshakes hash host port)
                                      (\(e::SomeException) -> return . Left $ ("EEE "++ (show e)) ++" "++ (show host))              
+           
+           
            
 handshakes:: B.ByteString -> N.HostName -> N.PortNumber -> IO (SIO.Handle, Handshake)           
 handshakes hash host port = do handle<- N.connectTo host (N.PortNumber  port)
@@ -55,7 +58,9 @@ handshakes hash host port = do handle<- N.connectTo host (N.PortNumber  port)
                                sendHandshake handle hash $ BC.pack myId
                                handshake <-recvHandshake handle            
                                return (handle, handshake)
-                                  
+           
+           
+           
 sendHandshake :: SIO.Handle -> B.ByteString -> B.ByteString -> IO ()
 sendHandshake handle hash peer = BL.hPutStr handle $ encode handshake 
   where handshake = Handshake len protocol rsrv hash myId
