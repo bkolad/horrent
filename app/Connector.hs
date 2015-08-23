@@ -20,6 +20,9 @@ import Network.HTTP as HTTP
 import Control.Concurrent.Async as Async (mapConcurrently)
 import Control.Applicative
 import Types
+import qualified Control.Concurrent.STM.TQueue as TQ
+import Control.Monad.STM
+import Data.List
 
 type TorrentContent = BP.BEncode            
           
@@ -36,6 +39,7 @@ makePeers tracker numberOfP =
        globalStatus    <- liftIO $ newGlobalBitField numberOfPieces     
        ipsAndPorts <- peersIpAndPortsFromTracker torrentContent         
        infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
+       
        logMsg $ "Number of avaliable peers " ++ show (length ipsAndPorts) 
        handshakes <- liftIO $ getHandshakes infoHash (take numberOfP ipsAndPorts)
        let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes                                     
@@ -49,6 +53,8 @@ makePeers tracker numberOfP =
        liftIO peers
 
        
+--   -----------------------------------    
+    
 getHandshakes :: BC.ByteString -> [(N.HostName, N.PortNumber)] -> IO ([(Either String (SIO.Handle, H.Handshake))])     
 getHandshakes infoHash ipsAndPorts = 
     liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) ipsAndPorts  

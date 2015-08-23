@@ -26,21 +26,21 @@ executable horrent-exec
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , horrent
-                     , directory ==1.2.*
-                     , bytestring ==0.10.*
-                     , mtl ==2.2.*
-                     , data-ordlist ==0.4.7.*
-                     , transformers ==0.4.2.*
-                     , array ==0.5.1.*
-                     , attoparsec ==0.12.*
-                     , stm ==2.4.*
-                     , containers ==0.5.*
-                     , base16-bytestring ==0.1.*
-                     , cryptohash ==0.11.*
-                     , async ==2.0.*
-                     , network ==2.6.*
-                     , binary ==0.7.*
-                     , HTTP ==4000.2.*
+                     , directory 
+                     , bytestring 
+                     , mtl
+                     , data-ordlist 
+                     , transformers 
+                     , array 
+                     , attoparsec 
+                     , stm 
+                     , containers 
+                     , base16-bytestring 
+                     , cryptohash 
+                     , async 
+                     , network 
+                     , binary 
+                     , HTTP 
 
 
   default-language:    Haskell2010
