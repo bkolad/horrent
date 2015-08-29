@@ -41,6 +41,11 @@ executable horrent-exec
                      , network 
                      , binary 
                      , HTTP 
+                     , conduit-extra
+                     , conduit
+                     , streaming-commons
+                     , resourcet
+                     
 
 
   default-language:    Haskell2010

@@ -1,6 +1,6 @@
 {-# LANGUAGE NoMonomorphismRestriction, ScopedTypeVariables, DoAndIfThenElse #-}
 
-module Connector ( liftEither, makePeers) where
+module Connector ( liftEither, makePeers, getInfoHash) where
 
 import qualified Peer as P (Peer, makePeer, showPeer, fromBsToInt) 
 import qualified BencodeParser as BP (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers, piceSize, torrentSize, piecesHashSeq)
@@ -32,13 +32,18 @@ logMsg a = liftIO $ print a
           
           
           
-makePeers :: String ->Int -> ExceptT String IO [P.Peer]  
-makePeers tracker numberOfP = 
+makePeers :: String -> ExceptT String IO [(N.HostName, N.PortNumber)]
+makePeers tracker = 
     do torrentContent <-  BP.parseFromFile tracker
        info@(numberOfPieces, maxP, maxLast) <- liftEither $ getSizeInfo torrentContent           
        globalStatus    <- liftIO $ newGlobalBitField numberOfPieces     
        ipsAndPorts <- peersIpAndPortsFromTracker torrentContent         
+      
+       return ipsAndPorts 
+       {--
+      
        infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
+       
        
        logMsg $ "Number of avaliable peers " ++ show (length ipsAndPorts) 
        handshakes <- liftIO $ getHandshakes infoHash (take numberOfP ipsAndPorts)
@@ -50,8 +55,13 @@ makePeers tracker numberOfP =
        
        piecesHash  <- liftEither $ BP.piecesHashSeq torrentContent                         
        let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) info globalStatus piecesHash) correctHanshakes
-       liftIO peers
+       liftIO peers --}
 
+getInfoHash :: String -> ExceptT String IO B.ByteString
+getInfoHash tracker = 
+     do torrentContent <-  BP.parseFromFile tracker  
+        infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
+        return infoHash
        
 --   -----------------------------------    
     

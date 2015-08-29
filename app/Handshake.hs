@@ -67,6 +67,17 @@ sendHandshake handle hash peer = BL.hPutStr handle $ encode handshake
         len = length protocol
         rsrv = B.replicate 8 0            
 
+        
+createHandshake :: B.ByteString -> B.ByteString
+createHandshake hash = toStrict . encode $ Handshake len protocol rsrv hash myId
+    where  len = length protocol
+           rsrv = B.replicate 8 0
+           
+           
+toStrict :: BL.ByteString -> B.ByteString
+toStrict = B.concat . BL.toChunks           
+           
+        
 {--        
 recvHandshake :: SIO.Handle -> IO Handshake 
 recvHandshake handle =  decode <$> (BL.hGetContents handle)
