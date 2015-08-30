@@ -78,12 +78,27 @@ toStrict :: BL.ByteString -> B.ByteString
 toStrict = B.concat . BL.toChunks           
            
         
-{--        
-recvHandshake :: SIO.Handle -> IO Handshake 
-recvHandshake handle =  decode <$> (BL.hGetContents handle)
+        
+recvHandshakeC :: B.ByteString -> Handshake 
+recvHandshakeC bs =  decode $ BL.fromStrict bs
 
- --}
 
+
+recvHandshakeC2 :: B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Handshake) 
+recvHandshakeC2 bs =  decodeOrFail $ BL.fromStrict bs
+
+{--
+recvHandshakeC2 :: B.ByteString -> Handshake 
+recvHandshakeC2 bs = do len <- P.fromBsToInt <$>  B.hGet handle 1
+                          ptr <- BC.unpack <$> B.hGet handle len
+                          rsrv <- B.hGet handle 8
+                          hash <- B.hGet handle 20
+                          peer <- BC.unpack <$> B.hGet handle 20 
+                          return $ Handshake len ptr rsrv hash peer
+
+                          --}
+ 
+ 
               
 recvHandshake :: SIO.Handle -> IO Handshake
 recvHandshake handle = do len <- P.fromBsToInt <$>  B.hGet handle 1

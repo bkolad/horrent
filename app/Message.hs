@@ -56,14 +56,14 @@ instance Binary Message where
    
    
    
-   get = do numBytes <- fromIntegral <$> getWord32be
+   get = do 
+            numBytes <- fromIntegral <$> getWord32be
             if (numBytes == 0)
                then return KeepAlive
-               else do idx <- getWord8
+               else do idx <- fromIntegral <$>  getWord8
                        
-                       let size =  numBytes -1 
-                                   
-                                      
+                       let size =(numBytes -1) 
+                                                                       
                        bs <- getByteString size
                        case idx of
                              0 -> return Choke
@@ -79,14 +79,41 @@ instance Binary Message where
                              x -> return $ Unknown (fromIntegral size) (fromIntegral x)
        
        
+       
+--getMessageC :: B.ByteString -> Message
+getMessageC::B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Message)
+getMessageC bs = (decodeOrFail $ BL.fromStrict bs)
+ 
+ 
+getM :: B.ByteString -> (Int, Int, B.ByteString)
+getM bs = runGet getTripplet (BL.fromStrict bs)
+  where getTripplet :: Get (Int, Int, B.ByteString)
+        getTripplet = do numBytes <-  fromIntegral <$> getWord32be
+                         idx <- fromIntegral <$> getWord8
+                         --rest <- getRemainingLazyByteString
+                         let size =(numBytes -1)                                                                       
+                         bs <- getByteString size
+                         rest <- getRemainingLazyByteString
+                         return $ (numBytes, idx, bs)        
+       
+       
+       
+       
 toPiece bs = runGet getTripplet (BL.fromChunks [bs])
   where getTripplet :: Get (Int, Int, B.ByteString)
-        getTripplet = do idx <-  getWord32be
+        getTripplet = do numBytes <- fromIntegral <$> getWord32be
                          begin <- getWord32be
                          rest <- getRemainingLazyByteString
-                         return $ (fromIntegral idx, fromIntegral begin, (B.concat . BL.toChunks) rest)
+                         return $ (numBytes, fromIntegral begin, (B.concat . BL.toChunks) rest)
    
    
+   
+   
+ 
+ 
+ 
+
+ 
 getMessage :: SIO.Handle -> IO Message 
 getMessage handle =  decode <$> (BL.hGetContents handle)
                                                          
