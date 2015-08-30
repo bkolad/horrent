@@ -83,18 +83,7 @@ instance Binary Message where
 --getMessageC :: B.ByteString -> Message
 getMessageC::B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Message)
 getMessageC bs = (decodeOrFail $ BL.fromStrict bs)
- 
- 
-getM :: B.ByteString -> (Int, Int, B.ByteString)
-getM bs = runGet getTripplet (BL.fromStrict bs)
-  where getTripplet :: Get (Int, Int, B.ByteString)
-        getTripplet = do numBytes <-  fromIntegral <$> getWord32be
-                         idx <- fromIntegral <$> getWord8
-                         --rest <- getRemainingLazyByteString
-                         let size =(numBytes -1)                                                                       
-                         bs <- getByteString size
-                         rest <- getRemainingLazyByteString
-                         return $ (numBytes, idx, bs)        
+   
        
        
        
