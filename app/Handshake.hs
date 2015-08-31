@@ -84,8 +84,8 @@ recvHandshakeC bs =  decode $ BL.fromStrict bs
 
 
 
-recvHandshakeC2 :: B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Handshake) 
-recvHandshakeC2 bs =  decodeOrFail $ BL.fromStrict bs
+decodeHandshake :: B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Handshake) 
+decodeHandshake bs =  decodeOrFail $ BL.fromStrict bs
 
 {--
 recvHandshakeC2 :: B.ByteString -> Handshake 
