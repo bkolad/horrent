@@ -7,10 +7,6 @@ import qualified System.IO as SIO
 import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
-import Control.Applicative
-import Debug.Trace
-
-
 
 
 type MsgLen = Word32
@@ -80,13 +76,11 @@ instance Binary Message where
        
        
        
---getMessageC :: B.ByteString -> Message
-getMessageC::B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Message)
-getMessageC bs = (decodeOrFail $ BL.fromStrict bs)
+
+decodeMessage::B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Message)
+decodeMessage bs = (decodeOrFail $ BL.fromStrict bs)
    
-       
-       
-       
+            
        
 toPiece bs = runGet getTripplet (BL.fromChunks [bs])
   where getTripplet :: Get (Int, Int, B.ByteString)
@@ -96,15 +90,10 @@ toPiece bs = runGet getTripplet (BL.fromChunks [bs])
                          return $ (numBytes, fromIntegral begin, (B.concat . BL.toChunks) rest)
    
    
-   
-   
- 
- 
- 
-
+  
  
 getMessage :: SIO.Handle -> IO Message 
-getMessage handle =  decode <$> (BL.hGetContents handle)
+getMessage handle = decode <$> (BL.hGetContents handle)
                                                          
                   
 sendMsg :: P.Peer -> Message -> IO ()

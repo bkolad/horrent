@@ -65,10 +65,6 @@ getInfoHash tracker =
        
 --   -----------------------------------    
     
-getHandshakes :: BC.ByteString -> [(N.HostName, N.PortNumber)] -> IO ([(Either String (SIO.Handle, H.Handshake))])     
-getHandshakes infoHash ipsAndPorts = 
-    liftIO $ Async.mapConcurrently (\(host,port) -> H.getHandshakes infoHash host port) ipsAndPorts  
-
  
  
 type NumberOfPieces = Int
