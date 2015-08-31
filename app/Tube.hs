@@ -21,12 +21,14 @@ sendHandshake infoHash appData =
       
       
  
-recHandshake :: Sink B.ByteString IO (Maybe B.ByteString) -- Chnage it to ErrorT
+ 
+ 
+recHandshake :: Sink BC.ByteString IO (Maybe BC.ByteString) -- Chnage it to ErrorT
 recHandshake = 
      do -- liftIO $ print "HANDSHAKE"
         handM <- await
         case handM of
-             Nothing -> return Nothing
+             Nothing -> return Nothing                                  -- <- map from conduit
              Just hand -> do
                   let e = H.recvHandshakeC2 hand
                   case e of
@@ -34,45 +36,60 @@ recHandshake =
                        Right (leftOver, idx, h) -> do
                                liftIO $ print $ "Handshake from " ++ (show h)
                                return $ Just $ BL.toStrict leftOver
-                  
-                  
+  
+  
+  
+messageAndLeftOver :: BC.ByteString -> (Maybe BC.ByteString, Either String M.Message)  
+messageAndLeftOver m = 
+    case (M.getMessageC m) of
+         Left (lo, idx, errorM) -> 
+              (Nothing, Left $ "PARSING ERROR " ++ errorM) 
+              
+         Right (lo, idx, m) -> do
+               if ((not . BL.null) lo) 
+                  then ((Just $ BL.toStrict lo), Right m)
+                  else (Nothing, Right m)
+              
+  
+  
  
-recMessage :: Bool -> Conduit BC.ByteString IO M.Message 
-recMessage b = 
+--recM :: Conduit M.Message IO M.Message   
+recM =
     do message <- await
        case message of
             Nothing -> return ()
-            Just jm -> 
-                 do case (M.getMessageC jm) of
-                         Left left -> do  liftIO $ print left
-                                          return ()
-                         Right (leftO, idx, m) -> 
-                               do -- liftIO $ print $ "MESSAGE " ++ (show m)
-                                  let lo = BL.toStrict leftO
-                                  if (not  (B.null lo)) then
-                                       do -- liftIO $ print $ "lo not null " ++ (show b) 
-                                          yield m
-                                          leftover $ lo
-                                          recMessage b
-                                  else 
-                                      do yield m
-                                         if b then (recMessage b) else (return ())
-    
+            Just jm -> do yield jm 
+                          recM
+         
 
     
-sink :: Sink M.Message IO ()      -- process messages here
+--sink :: Sink M.Message IO ()      -- process messages here
 sink = awaitForever (liftIO . print)
     
-    
-                  
- 
+
 tube appData = 
     do leftOver <- CN.appSource appData $$ recHandshake
        case leftOver of
             Nothing -> print "Problem with Handshake"
-            Just lo -> do yield lo $= recMessage False $$ sink  
-                          CN.appSource appData $= recMessage True $$ sink
-  
+            Just lo -> do yield lo $= (flushLeftOver False messageAndLeftOver) =$= recM $$ sink  
+                          CN.appSource appData 
+                            $= (flushLeftOver True messageAndLeftOver) 
+                            =$= recM 
+                            $$ sink
+    
+    
+                  
  
- 
+-- Combinator 
+flushLeftOver :: Monad m => Bool ->  (r -> ((Maybe r), k)) -> Conduit r m k  
+flushLeftOver forever fun = awaitForever (process fun)
+    where   
+         process fun f =  
+              do let (loM, k) = fun f
+                 yield k    
+                 case loM of 
+                      Nothing -> if forever then 
+                                    (flushLeftOver forever fun) 
+                                 else return ()
+                      Just lo -> leftover lo 
        
