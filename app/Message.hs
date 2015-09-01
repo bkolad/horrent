@@ -91,6 +91,9 @@ toPiece bs = runGet getTripplet (BL.fromChunks [bs])
    
    
   
+encodeMessage :: Message -> B.ByteString
+encodeMessage = BL.toStrict . encode
+  
  
 getMessage :: SIO.Handle -> IO Message 
 getMessage handle = decode <$> (BL.hGetContents handle)

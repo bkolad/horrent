@@ -19,43 +19,62 @@ sendHandshake infoHash appData =
    do let handshake = H.createHandshake infoHash
       yield handshake $$ CN.appSink appData 
       
+
       
- 
- 
+      
 recHandshake :: Sink BC.ByteString IO (Either String (BC.ByteString, H.Handshake)) -- <-- replace IO by Either
 recHandshake = 
    do handM <- await
       case handM of
-         Nothing -> 
-              return $ Left "No handshake"                               
-         Just hand -> do
-              case H.decodeHandshake hand of   -- ideally return H.decodeHandshake hand
-                 Left (_, _, e) -> 
-                      return $ Left $ "Problem with handshake " ++ e    -- <-- return it from H.Handshake and use lifting                 
-                 Right (leftOver, idx, h) -> do
-                      liftIO $ print $ "Handshake from " ++ (show h)
-                      return $ Right $ (BL.toStrict leftOver,  h)   
+           Nothing -> return $ Left "No handshake"                               
+           Just hand -> return $ convertHandshake hand
+      where 
+            convertHandshake = convertParsedOutput . H.decodeHandshake 
+            convertParsedOutput x = 
+               do case x of
+                       Left (_, _, e) -> Left $ "Problem with parsing handshake " ++ (show e)
+                       Right (leftOver, _, h) -> Right $ (BL.toStrict leftOver,  h)
+        
   
+ 
+
+sentInterested :: CN.AppData -> IO() 
+sentInterested appData = yield (M.encodeMessage M.Interested) $$ CN.appSink appData  
+
   
-  
--- awaitForeverLiftEiher fun = awaitForever (\x -> yoeld $ fun <$> x)  
-  
-  
---recM :: Conduit M.Message IO M.Message   
-recMessage =
+recMessage :: CN.AppData -> Conduit (Either String M.Message) IO (Either String String)   
+recMessage appData =
    do message <- await
       case message of
-         Nothing -> return ()
-         Just jm -> do yield jm                           
-                       recMessage
+           Nothing -> return ()
+           Just (Left x) -> yield $ Left x
+          
+           {-Just jm -> do case jm of 
+                              Left x -> yield $ Left x
+                              Right (M.Bitfield b) -> do
+                                                         liftIO $ sentInterested appData
+                                                         yield $ Right "B"  -- sequence                          
+                                                         recMessage appData
+                              Right (M.Have b) -> do 
+                                                      yield $ Right $ "H"                           
+                                                      recMessage appData
+                                                      
+                              Right (M.KeepAlive) -> do 
+                                                         yield $ Right $ "K"                           
+                                                         recMessage appData  
+                              Right (M.UnChoke) -> do 
+                                                         yield $ Right $ "U!!"                           
+                                                         recMessage appData          -}                
+                                                         
+                            
+                         
          
 
-    
---sink :: Sink M.Message IO ()      -- process messages here
-sink = awaitForever (liftIO . print)
-    
+-- sinkH = awaitForever (liftIO . print . show)
 
-    
+--sinkM :: Sink (Either String String) IO ()
+sinkM = awaitForever (liftIO . print . show)
+      
 tube appData = 
    do leftOver <- CN.appSource appData $$ recHandshake
       case leftOver of
@@ -63,23 +82,23 @@ tube appData =
          Right (lo, h) -> 
               do yield lo 
                   $= (flushLeftOver False messageAndLeftOver) 
-                  =$= recMessage 
-                  $$ sink  
+                  =$= (recMessage appData)
+                  $$ sinkM  
                   
                  CN.appSource appData 
                   $= (flushLeftOver True messageAndLeftOver) 
-                  =$= recMessage 
-                  $$ sink
+                  =$= (recMessage appData) 
+                  $$ sinkM
                             
                             
     
     
     
 messageAndLeftOver :: BC.ByteString -> (Maybe BC.ByteString, Either String M.Message)  
-messageAndLeftOver m = 
-    case (M.decodeMessage m) of
+messageAndLeftOver x = 
+    case (M.decodeMessage x) of     
          Left (lo, idx, errorM) -> 
-              (Nothing, Left $ "PARSING ERROR " ++ errorM)    -- This should be returned by get message
+              (Nothing, Left $ "PARSING ERROR " ++ errorM)    
          Right (lo, idx, m) -> do
               if ((not . BL.null) lo) 
                  then ((Just $ BL.toStrict lo), Right m)
@@ -103,6 +122,18 @@ flushLeftOver forever fun = awaitForever $ process fun
                       
                       
                       
+{--  
+processMessageC :: CN.AppData ->  Conduit (Either String M.Message) IO (Either String String)  
+processMessageC appData = awaitForever (\x -> do lo <- liftIO $ processMessage appData x
+                                                 yield $ lo )  
 
+processMessage :: CN.AppData -> M.Message -> IO String
+processMessage appData m = 
+  do case m of
+          M.Bitfield b -> do sendInterested appData
+                             return "BIT FIELD"
+          M.Have h -> return "Have"
+          _ -> return "Bla bla"
+          --}
                       
        
