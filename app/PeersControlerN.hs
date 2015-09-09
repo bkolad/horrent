@@ -42,10 +42,8 @@ start tracker =
 runClient :: (B.ByteString, Int) -> B.ByteString -> IO ()
 runClient ipAndPort infoHash = 
     CN.runTCPClient ((uncurry CN.clientSettings) . swap $ ipAndPort) $ \appData -> do
-      --  print "RUNCLIENT"
-        T.sendHandshake infoHash appData
-        T.tube appData
-   --     runResourceT $ CN.appSource appData $$ getMessage
+        let peer = T.PeerState appData [] infoHash
+        T.tube peer
         
                              
 
