@@ -19,8 +19,8 @@ data Message = KeepAlive
              | UnChoke
              | Interested
              | NotInterested
-             | Have (Int, B.ByteString)
-             | Bitfield MsgPayload
+             | Have B.ByteString
+             | Bitfield B.ByteString
              | Request (Int, Int, Int)
              | Piece (Int, Int, B.ByteString)
              | Cancel
@@ -66,7 +66,7 @@ instance Binary Message where
                              1 -> return UnChoke
                              2 -> return Interested
                              3 -> return NotInterested
-                             4 -> return $ Have (P.fromBsToInt bs, bs)
+                             4 -> return $ Have bs
                              5 -> return $ Bitfield bs
                              6 -> return $ Request (undefined, undefined, undefined)
                              7 -> return $ Piece (toPiece bs)

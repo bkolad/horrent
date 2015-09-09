@@ -37,25 +37,9 @@ makePeers tracker =
     do torrentContent <-  BP.parseFromFile tracker
        info@(numberOfPieces, maxP, maxLast) <- liftEither $ getSizeInfo torrentContent           
        globalStatus    <- liftIO $ newGlobalBitField numberOfPieces     
-       ipsAndPorts <- peersIpAndPortsFromTracker torrentContent         
-      
+       ipsAndPorts <- peersIpAndPortsFromTracker torrentContent              
        return ipsAndPorts 
-       {--
       
-       infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
-       
-       
-       logMsg $ "Number of avaliable peers " ++ show (length ipsAndPorts) 
-       handshakes <- liftIO $ getHandshakes infoHash (take numberOfP ipsAndPorts)
-       let (errorHandshakes, correctHanshakes) = DE.partitionEithers handshakes                                     
-       logMsg $ "Handshakes with Error "++ show errorHandshakes
-       logMsg $ "Correct Handshakes "++ show correctHanshakes
-       
-       -- ----                    
-       
-       piecesHash  <- liftEither $ BP.piecesHashSeq torrentContent                         
-       let peers = mapM (\(handler, handshake) -> P.makePeer handler (H.peerName handshake) info globalStatus piecesHash) correctHanshakes
-       liftIO peers --}
 
 getInfoHash :: String -> ExceptT String IO B.ByteString
 getInfoHash tracker = 

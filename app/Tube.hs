@@ -10,9 +10,11 @@ import qualified Data.ByteString.Char8 as BC
 import Data.Conduit
 import qualified Data.Conduit.Network as CN
 import Control.Monad.Trans.Resource
+import qualified Data.Bits as Bits
 
 
-       
+type Perhaps a = Either String a          
+  
   
 sendHandshake :: B.ByteString ->  CN.AppData -> IO ()  
 sendHandshake infoHash appData = 
@@ -22,7 +24,7 @@ sendHandshake infoHash appData =
 
       
       
-recHandshake :: Sink BC.ByteString IO (Either String (BC.ByteString, H.Handshake)) -- <-- replace IO by Either
+recHandshake :: Monad m => Sink BC.ByteString m (Perhaps (BC.ByteString, H.Handshake)) -- <-- replace IO by Either
 recHandshake = 
    do handM <- await
       case handM of
@@ -41,13 +43,35 @@ recHandshake =
 sentInterested :: CN.AppData -> IO() 
 sentInterested appData = yield (M.encodeMessage M.Interested) $$ CN.appSink appData  
 
+
+
+                      
+fromBsToInt bs = sum $ zipWith (\x y->x*2^y) (reverse ws) [0,8..]
+                 where ws = map fromIntegral (B.unpack bs)
+                       
+convertToBits bs = 
+  let bits = [Bits.testBit w i| w<-B.unpack bs, i<-[7,6.. 0]]
+  in map snd $ filter fst $ zip bits [0 ..]
+                   
   
-recMessage :: CN.AppData -> Conduit (Either String M.Message) IO (Either String String)   
+recMessage :: CN.AppData -> Conduit (Perhaps M.Message) IO (Perhaps String)   
 recMessage appData =
    do message <- await
       case message of
            Nothing -> return ()
            Just (Left x) -> yield $ Left x
+           Just (Right (M.Bitfield b)) -> do  
+                                       yield (Right $ "BB " ++ (show (convertToBits b)))
+                                       recMessage appData
+           
+           Just (Right (M.Have b)) -> do  
+                                       yield (Right $ "H " ++ (show (fromBsToInt b)))
+                                       recMessage appData
+          
+          
+           Just (Right y) -> do 
+                                yield (Right $ show y)
+                                recMessage appData
           
            {-Just jm -> do case jm of 
                               Left x -> yield $ Left x
@@ -94,7 +118,7 @@ tube appData =
     
     
     
-messageAndLeftOver :: BC.ByteString -> (Maybe BC.ByteString, Either String M.Message)  
+messageAndLeftOver :: BC.ByteString -> (Maybe BC.ByteString, Perhaps M.Message)  
 messageAndLeftOver x = 
     case (M.decodeMessage x) of     
          Left (lo, idx, errorM) -> 
@@ -114,7 +138,7 @@ flushLeftOver forever fun = awaitForever $ process fun
               do let (loM, k) = fun f
                  yield k    
                  case loM of 
-                      Nothing -> if forever then 
+                      Nothing -> if forever then  -- GUARD
                                     (flushLeftOver forever fun) 
                                  else return ()
                       Just lo -> leftover lo 
