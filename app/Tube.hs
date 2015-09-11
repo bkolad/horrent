@@ -52,7 +52,7 @@ recMessage peer appData =
                  yield $ Left x
                  liftIO $ CC.threadDelay 1000000
                  liftIO $ sendRequest appData
-                 recMessage peer appData
+               --  recMessage peer appData
             
            Just (Right (M.Bitfield b)) -> 
               do 
@@ -69,14 +69,19 @@ recMessage peer appData =
           
            Just (Right M.UnChoke) -> 
               do 
-                 isInteresting <- liftIO $ P.isInteresting peer 
-                 if isInteresting 
-                    then do 
+                 nextPiece <- liftIO $ P.requestNext peer 
+                 case nextPiece of
+                      Nothing -> return ()
+                      Just x -> 
+                         do 
                             yield (Right $ show M.UnChoke)
                             liftIO $ sendRequest appData
                             recMessage peer appData
-                    else return ()       
-                    
+                       
+           
+           Just (Right M.Choke) -> 
+              liftIO $ print "CHOCKE"
+           
            Just (Right y) -> 
               do 
                  yield (Right $ show y)

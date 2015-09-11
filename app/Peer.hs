@@ -26,23 +26,25 @@ convertToBits bs =
    where
      bits = [Bits.testBit w i| w <- B.unpack bs, i <- [7,6.. 0]]
      
+    
   
   
-isInteresting :: Peer -> IO Bool  
-isInteresting peer = 
-  STM.atomically $ let pics = pieces peer
-                       global = globalStatus peer
-                   in interesting pics global
+requestNext :: Peer -> IO (Maybe Int)
+requestNext peer =
+   STM.atomically $ let pics = pieces peer
+                        global = globalStatus peer
+                    in reqNext pics global
   
+
+
+
+reqNext :: [Int] -> TP.GlobalPiceInfo -> STM.STM (Maybe Int)  
+reqNext [] _ = return Nothing     
+reqNext (x:xs) global = 
+   do pInfo <- MA.readArray global x
+      case pInfo of
+           TP.NotHave    -> return $ Just x
+           TP.InProgress -> reqNext xs global
+           TP.Done       -> reqNext xs global
   
-  
-interesting :: [Int] -> TP.GlobalPiceInfo -> STM.STM (Bool)
-interesting [] _ = return False
-interesting (x:xs) global = 
-  do pInfo <- MA.readArray global x
-     case pInfo of
-          TP.NotHave    -> return True
-          TP.InProgress -> interesting xs global
-          TP.Done       -> interesting xs global
-        
-        
+      

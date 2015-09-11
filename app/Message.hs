@@ -78,7 +78,7 @@ instance Binary Message where
        
 
 decodeMessage::B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Message)
-decodeMessage bs = (decodeOrFail $ BL.fromStrict bs)
+decodeMessage bs = runGetOrFail get $ BL.fromStrict bs-- (decodeOrFail $ BL.fromStrict bs)
    
             
        
