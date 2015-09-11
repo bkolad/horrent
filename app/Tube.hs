@@ -11,14 +11,11 @@ import Data.Conduit
 import qualified Data.Conduit.Network as CN
 import Control.Monad.Trans.Resource
 import qualified Data.Bits as Bits
+import qualified Peer as P
 
 
 type Perhaps a = Either String a          
   
-  
-data PeerState = PeerState { appData :: CN.AppData
-                            ,pieces :: [Int] 
-                            ,infoHash :: B.ByteString}  
   
 sendHandshake :: B.ByteString ->  CN.AppData -> IO ()  
 sendHandshake infoHash appData = 
@@ -43,7 +40,7 @@ recHandshake =
      
      
   
-recMessage :: PeerState -> Conduit (Perhaps M.Message) IO (Perhaps String)   
+recMessage :: P.Peer -> Conduit (Perhaps M.Message) IO (Perhaps String)   
 recMessage peer =
    do message <- await
       case message of
@@ -51,15 +48,16 @@ recMessage peer =
            Just (Left x) -> yield $ Left x
            Just (Right (M.Bitfield b)) -> 
               do 
-                 let pList = convertToBits b 
+                 let pList = P.convertToBits b 
                  yield (Right $ "BB " ++ (show pList))
-                 recMessage $ peer {pieces = pList}
+                 recMessage $ peer {P.pieces = pList}
            
            Just (Right (M.Have b)) -> 
               do 
-                 let pList = (fromBsToInt b) : pieces peer
+                 let pList = (P.fromBsToInt b) : P.pieces peer
+                 liftIO $ print "  "
                  yield (Right $ "H " ++ (show pList))
-                 recMessage $ peer {pieces = pList}
+                 recMessage $ peer {P.pieces = pList}
           
            Just (Right y) -> 
               do 
@@ -85,10 +83,10 @@ generiCSource source lo =
   
 -- ((addCleanup (const $ liftIO $ putStrLn "Stopping")) $ source)  
   
-tube :: PeerState -> IO ()  
-tube peer = 
-   do sendHandshake (infoHash peer) (appData peer)
-      let source = (addCleanup (const $ liftIO $ putStrLn "Stopping")) $ CN.appSource (appData peer)
+tube :: P.Peer -> CN.AppData -> IO ()  
+tube peer appData = 
+   do sendHandshake (P.infoHash peer) appData
+      let source = (addCleanup (const $ liftIO $ putStrLn "Stopping")) $ CN.appSource (appData)
       leftOver <-  source $$ recHandshake
       case leftOver of
          Left l -> print l
@@ -99,7 +97,6 @@ tube peer =
                   $$ sinkM  
                             
                             
-    
     
     
 messageAndLeftOver :: BC.ByteString -> (Maybe BC.ByteString, Perhaps M.Message)  
@@ -127,15 +124,7 @@ flushLeftOver fun = awaitForever $ process fun
                       
  
  
-fromBsToInt bs = 
-   sum $ zipWith (\x y->x*2^y) (reverse ws) [0,8..]
-   where 
-      ws = map fromIntegral (B.unpack bs)
-                       
-convertToBits bs = 
-   map snd $ filter fst $ zip bits [0 ..] 
-   where
-     bits = [Bits.testBit w i| w <- B.unpack bs, i <- [7,6.. 0]] 
+ 
                       
                       
                       

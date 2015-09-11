@@ -1,6 +1,6 @@
 module Message where
 
-import qualified Peer as P (Peer, makePeer, showPeer, fromBsToInt, handleP) 
+-- import qualified Peer as P (Peer, makePeer, showPeer, fromBsToInt, handleP) 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified System.IO as SIO
@@ -93,15 +93,7 @@ toPiece bs = runGet getTripplet (BL.fromChunks [bs])
   
 encodeMessage :: Message -> B.ByteString
 encodeMessage = BL.toStrict . encode
-  
  
-getMessage :: SIO.Handle -> IO Message 
-getMessage handle = decode <$> (BL.hGetContents handle)
-                                                         
-                  
-sendMsg :: P.Peer -> Message -> IO ()
-sendMsg peer msg = send msg
-  where handle = P.handleP peer
-        send = BL.hPutStr handle . encode  
-                          
+ 
+        
                  

@@ -20,30 +20,29 @@ import Data.Streaming.Network (HasReadWrite)
 import qualified Control.Concurrent.Async as Async
 
 import qualified Tube as T
+import qualified Types as TP
+
 
 
 main::IO() 
 main = do result <- runExceptT $ start "tom.torrent" 
           print result
-        
 
-
-start :: String -> ExceptT String IO [(N.HostName, N.PortNumber)]
+          
+          
+start :: String -> ExceptT String IO ()
 start tracker = 
-     do ipsPorts <-  CN.makePeers tracker
-        let ipsAndPorts = (\(s, ip)-> (BC.pack s, fromIntegral ip)) <$> ipsPorts
-        info <- CN.getInfoHash tracker
-        liftIO $ print $ "Ips and Ports " ++ (show ipsAndPorts)
-        liftIO $ runClient (ipsAndPorts !! 1) info 
-        return ipsPorts
+     do peers  <-  CN.makePeers tracker
+        let peer = peers !! 1
+        liftIO $ runClient peer
+        return ()
         
  
  
-runClient :: (B.ByteString, Int) -> B.ByteString -> IO ()
-runClient ipAndPort infoHash = 
-    CN.runTCPClient ((uncurry CN.clientSettings) . swap $ ipAndPort) $ \appData -> do
-        let peer = T.PeerState appData [] infoHash
-        T.tube peer
+runClient :: P.Peer -> IO ()
+runClient peer = 
+    CN.runTCPClient (CN.clientSettings (P.port peer) (BC.pack $ P.hostName peer)) $ \appData -> do
+        T.tube peer appData
         
                              
 

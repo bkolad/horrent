@@ -2,7 +2,7 @@
 
 module Connector ( liftEither, makePeers, getInfoHash) where
 
-import qualified Peer as P (Peer, makePeer, showPeer, fromBsToInt) 
+import qualified Peer as P  
 import qualified BencodeParser as BP (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers, piceSize, torrentSize, piecesHashSeq)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -32,13 +32,15 @@ logMsg a = liftIO $ print a
           
           
           
-makePeers :: String -> ExceptT String IO [(N.HostName, N.PortNumber)]
+makePeers :: String -> ExceptT String IO [P.Peer]
 makePeers tracker = 
     do torrentContent <-  BP.parseFromFile tracker
        info@(numberOfPieces, maxP, maxLast) <- liftEither $ getSizeInfo torrentContent           
        globalStatus    <- liftIO $ newGlobalBitField numberOfPieces     
-       ipsAndPorts <- peersIpAndPortsFromTracker torrentContent              
-       return ipsAndPorts 
+       ipsAndPorts <- peersIpAndPortsFromTracker torrentContent           
+       infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
+       let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus) ipsAndPorts
+       return peers 
       
 
 getInfoHash :: String -> ExceptT String IO B.ByteString

@@ -4,7 +4,7 @@ module Handshake where
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
-import qualified Peer as P (Peer, makePeer, showPeer, fromBsToInt)
+import qualified Peer as P
 import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
