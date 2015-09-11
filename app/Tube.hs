@@ -12,6 +12,7 @@ import qualified Data.Conduit.Network as CN
 import Control.Monad.Trans.Resource
 import qualified Data.Bits as Bits
 import qualified Peer as P
+import qualified Control.Concurrent as CC
 
 
 type Perhaps a = Either String a          
@@ -40,31 +41,48 @@ recHandshake =
      
      
   
-recMessage :: P.Peer -> Conduit (Perhaps M.Message) IO (Perhaps String)   
-recMessage peer =
+recMessage :: P.Peer -> CN.AppData -> Conduit (Perhaps M.Message) IO (Perhaps String)   
+recMessage peer appData =
    do message <- await
       case message of
-           Nothing -> return ()
-           Just (Left x) -> yield $ Left x
+           Nothing -> return () 
+                  
+           Just (Left x) ->
+              do 
+                 yield $ Left x
+                 liftIO $ CC.threadDelay 1000000
+                 liftIO $ sendRequest appData
+                 recMessage peer appData
+            
            Just (Right (M.Bitfield b)) -> 
               do 
                  let pList = P.convertToBits b 
-                 yield (Right $ "BB " ++ (show pList))
-                 recMessage $ peer {P.pieces = pList}
+                     newPeer = peer {P.pieces = pList}
+                 liftIO $ sendInterested appData
+                 recMessage newPeer appData
            
            Just (Right (M.Have b)) -> 
               do 
                  let pList = (P.fromBsToInt b) : P.pieces peer
-                 liftIO $ print "  "
-                 yield (Right $ "H " ++ (show pList))
-                 recMessage $ peer {P.pieces = pList}
+                     newPeer = peer {P.pieces = pList}
+                 recMessage newPeer appData
           
+           Just (Right M.UnChoke) -> 
+              do 
+                 isInteresting <- liftIO $ P.isInteresting peer 
+                 if isInteresting 
+                    then do 
+                            yield (Right $ show M.UnChoke)
+                            liftIO $ sendRequest appData
+                            recMessage peer appData
+                    else return ()       
+                    
            Just (Right y) -> 
               do 
                  yield (Right $ show y)
-              --   recMessage appData
-       
-                     
+                 liftIO $ sendRequest appData
+                 recMessage peer appData
+                 
                                                          
                             
                          
@@ -93,7 +111,7 @@ tube peer appData =
          Right (lo, h) -> 
               do generiCSource source lo
                   $= (flushLeftOver messageAndLeftOver) 
-                  =$= (recMessage peer)
+                  =$= (recMessage peer appData)
                   $$ sinkM  
                             
                             
@@ -103,7 +121,7 @@ messageAndLeftOver :: BC.ByteString -> (Maybe BC.ByteString, Perhaps M.Message)
 messageAndLeftOver x = 
     case (M.decodeMessage x) of     
          Left (lo, idx, errorM) -> 
-              (Nothing, Left $ "PARSING ERROR " ++ errorM)    
+              (Nothing, Left $ "HORRENT PARSING ERROR: " ++(show lo) ++" "++(show idx)++" " ++ errorM)    
          Right (lo, idx, m) -> do
               if ((not . BL.null) lo) 
                  then ((Just $ BL.toStrict lo), Right m)
@@ -128,6 +146,8 @@ flushLeftOver fun = awaitForever $ process fun
                       
                       
                       
-sentInterested :: CN.AppData -> IO() 
-sentInterested appData = yield (M.encodeMessage M.Interested) $$ CN.appSink appData  
+sendInterested :: CN.AppData -> IO() 
+sendInterested appData = yield (M.encodeMessage M.Interested) $$ CN.appSink appData  
 
+sendRequest :: CN.AppData -> IO() 
+sendRequest appData = yield (M.encodeMessage $ M.Request (0,0,32)) $$ CN.appSink appData  

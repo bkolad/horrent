@@ -17,7 +17,8 @@ import Control.Monad.Trans.Except
 import Control.Monad.IO.Class (liftIO)
 
 
-data PiceInfo = Done | InProgress | NotHave deriving Show
+data PiceInfo = Done | InProgress | NotHave 
+  deriving (Show, Eq)
 
 type GlobalPiceInfo = TA.TArray Int PiceInfo 
 
