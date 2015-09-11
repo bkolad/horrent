@@ -40,6 +40,22 @@ recHandshake =
                        Right (leftOver, _, h) -> Right $ (BL.toStrict leftOver,  h)
      
      
+     
+-- TODO forever Either retray     
+
+foreverE :: (M.Message -> Conduit (Perhaps M.Message) IO M.Message) -> Conduit (Perhaps M.Message) IO M.Message 
+foreverE fun =
+   do message <- await
+      case message of
+           Nothing -> return () 
+           Just (Left x) -> 
+              do 
+                 liftIO $ print "logError" -- Or Yield
+                 return ()
+           Just (Right x) -> do fun x
+                                foreverE fun
+            
+
   
 recMessage :: P.Peer -> CN.AppData -> Conduit (Perhaps M.Message) IO (Perhaps String)   
 recMessage peer appData =
@@ -52,7 +68,7 @@ recMessage peer appData =
                  yield $ Left x
                  liftIO $ CC.threadDelay 1000000
                  liftIO $ sendRequest appData
-               --  recMessage peer appData
+                 recMessage peer appData
             
            Just (Right (M.Bitfield b)) -> 
               do 
@@ -78,9 +94,12 @@ recMessage peer appData =
                             liftIO $ sendRequest appData
                             recMessage peer appData
                        
-           
+           --Just (Right (M.Piece (idx,offset,content))) ->
+             -- return ()
+          
+          
            Just (Right M.Choke) -> 
-              liftIO $ print "CHOCKE"
+              liftIO $ print "M.Choke"
            
            Just (Right y) -> 
               do 
