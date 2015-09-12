@@ -41,56 +41,78 @@ recHandshake =
      
      
      
--- TODO forever Either retray     
 
-foreverE :: (M.Message -> Conduit (Perhaps M.Message) IO M.Message) -> Conduit (Perhaps M.Message) IO M.Message 
-foreverE fun =
-   do message <- await
-      case message of
-           Nothing -> return () 
-           Just (Left x) -> 
-              do 
-                 liftIO $ print "logError" -- Or Yield
-                 return ()
-           Just (Right x) -> do fun x
-                                foreverE fun
-            
 
+logParsingError :: Conduit (Perhaps M.Message) IO M.Message                                
+logParsingError =
+  do message <- await
+     case message of
+           Nothing -> return ()       
+           Just (Left x) -> liftIO $ print ("Parsing Error " ++ (show x))
+           Just (Right x) -> do yield x
+                                logParsingError 
+           
+
+        
   
-recMessage :: P.Peer -> CN.AppData -> Conduit (Perhaps M.Message) IO (Perhaps String)   
-recMessage peer appData =
+recMessage :: P.Peer -> CN.AppData -> Conduit M.Message IO P.Peer    -- TODO recurse always check req next in sinq --? -- replace 
+recMessage peer appData = do
+   message <- await
+   case message of
+        Nothing -> return ()
+        Just (M.Bitfield b) -> 
+           do let pList = P.convertToBits b 
+                  newPeer = peer {P.pieces = pList}
+              liftIO $ sendInterested appData
+              recMessage newPeer appData
+                 
+        Just (M.Have b) -> 
+           do let pList = (P.fromBsToInt b) : P.pieces peer
+                  newPeer = peer {P.pieces = pList}
+              recMessage newPeer appData
+        
+        Just M.UnChoke -> 
+           do let newPeer = peer {P.unChoked = True}
+              yield newPeer
+              recMessage newPeer appData
+              
+        Just M.Choke -> 
+           do let newPeer = peer {P.unChoked = False}
+              yield newPeer
+              recMessage newPeer appData 
+              
+       -- Just(M.Piece (idx,offset,content) ->
+       --    do 
+             
+        Just y -> liftIO $ print ("This message should not arrive while downloading " ++ (show y))     
+        
+                   
+  {--
    do message <- await
       case message of
            Nothing -> return () 
-                  
-           Just (Left x) ->
-              do 
-                 yield $ Left x
-                 liftIO $ CC.threadDelay 1000000
-                 liftIO $ sendRequest appData
-                 recMessage peer appData
             
-           Just (Right (M.Bitfield b)) -> 
+           Just (M.Bitfield b) -> 
               do 
                  let pList = P.convertToBits b 
                      newPeer = peer {P.pieces = pList}
                  liftIO $ sendInterested appData
                  recMessage newPeer appData
            
-           Just (Right (M.Have b)) -> 
+           Just (M.Have b) -> 
               do 
                  let pList = (P.fromBsToInt b) : P.pieces peer
                      newPeer = peer {P.pieces = pList}
                  recMessage newPeer appData
           
-           Just (Right M.UnChoke) -> 
-              do 
+           Just M.UnChoke -> 
+              do
                  nextPiece <- liftIO $ P.requestNext peer 
                  case nextPiece of
                       Nothing -> return ()
                       Just x -> 
                          do 
-                            yield (Right $ show M.UnChoke)
+                            yield peer
                             liftIO $ sendRequest appData
                             recMessage peer appData
                        
@@ -98,14 +120,14 @@ recMessage peer appData =
              -- return ()
           
           
-           Just (Right M.Choke) -> 
+           Just M.Choke -> 
               liftIO $ print "M.Choke"
            
-           Just (Right y) -> 
+           Just y -> 
               do 
-                 yield (Right $ show y)
+                 yield peer
                  liftIO $ sendRequest appData
-                 recMessage peer appData
+                 recMessage peer appData --}
                  
                                                          
                             
@@ -135,6 +157,7 @@ tube peer appData =
          Right (lo, h) -> 
               do generiCSource source lo
                   $= (flushLeftOver messageAndLeftOver) 
+                  =$= logParsingError
                   =$= (recMessage peer appData)
                   $$ sinkM  
                             

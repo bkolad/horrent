@@ -13,8 +13,14 @@ data Peer = Peer { hostName :: N.HostName
                  , pieces :: [Int]
                  , infoHash :: B.ByteString
                  , globalStatus :: TP.GlobalPiceInfo
+                 , unChoked :: Bool
+              --   , buffer :: T.Buffer
                  }
 
+                 
+instance Show Peer where
+  show p = (hostName p) ++ " "++ (show $ port p) ++ " " ++ (show $ pieces p)                
+                 
 fromBsToInt bs = 
    sum $ zipWith (\x y->x*2^y) (reverse ws) [0,8..]
    where 
