@@ -39,7 +39,7 @@ makePeers tracker =
        globalStatus    <- liftIO $ newGlobalBitField numberOfPieces     
        ipsAndPorts <- peersIpAndPortsFromTracker torrentContent           
        infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
-       let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus False) ipsAndPorts
+       let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus False Nothing) ipsAndPorts
        return peers 
       
 

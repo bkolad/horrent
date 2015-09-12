@@ -14,7 +14,7 @@ data Peer = Peer { hostName :: N.HostName
                  , infoHash :: B.ByteString
                  , globalStatus :: TP.GlobalPiceInfo
                  , unChoked :: Bool
-              --   , buffer :: T.Buffer
+                 , buffer :: Maybe (Int, Int, B.ByteString)
                  }
 
                  

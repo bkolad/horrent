@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Tube where
 
 import Data.Conduit
@@ -7,12 +8,15 @@ import qualified Handshake as H
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import Data.Conduit
 import qualified Data.Conduit.Network as CN
-import Control.Monad.Trans.Resource
 import qualified Data.Bits as Bits
 import qualified Peer as P
 import qualified Control.Concurrent as CC
+import qualified Data.Sequence as Seq
+import qualified Types as TP
+import Control.Monad.Trans.Resource
+import Data.Conduit
+import Data.Maybe
 
 
 type Perhaps a = Either String a          
@@ -48,11 +52,44 @@ logParsingError =
   do message <- await
      case message of
            Nothing -> return ()       
-           Just (Left x) -> liftIO $ print ("Parsing Error " ++ (show x))
-           Just (Right x) -> do yield x
-                                logParsingError 
+           Just (Left x) -> 
+              liftIO $ print ("Parsing Error " ++ (show x))
+           Just (Right x) -> 
+              do yield x
+                 logParsingError 
            
 
+ 
+class Fooable a where
+   foo :: a -> String 
+ 
+data Initialized 
+data NotInitialized 
+ 
+data P a = P Int
+ 
+ 
+instance Fooable (P Initialized) where
+  foo (P x) = ("Init " ++ (show x))
+  
+  
+--instance Fooable (P NotInitialized) where
+--  foo (P x) = ("NOT INIT" ++ (show x)) 
+ 
+
+i :: P Initialized
+i = P 3
+
+n :: P NotInitialized
+n = P 5
+  
+convert :: P NotInitialized -> P Initialized
+convert (P x) = P x
+ 
+ 
+blabla :: (Fooable a) => a -> String
+blabla = foo
+        
         
   
 recMessage :: P.Peer -> CN.AppData -> Conduit M.Message IO P.Peer    -- TODO recurse always check req next in sinq --? -- replace 
@@ -75,19 +112,37 @@ recMessage peer appData = do
            do let newPeer = peer {P.unChoked = True}
               yield newPeer
               recMessage newPeer appData
-              
-        Just M.Choke -> 
-           do let newPeer = peer {P.unChoked = False}
-              yield newPeer
-              recMessage newPeer appData 
-              
-       -- Just(M.Piece (idx,offset,content) ->
-       --    do 
-             
-        Just y -> liftIO $ print ("This message should not arrive while downloading " ++ (show y))     
         
-                   
-  {--
+        Just (M.Piece p@(idx,offset,content)) ->
+           do let newPeer = peer {P.buffer = Just p}
+              yield newPeer
+              --liftIO $ print newPeer
+              recMessage newPeer appData 
+    
+        Just M.Choke -> return ()
+        
+        Just y -> 
+           do liftIO $ 
+                 print ("This message should not arrive while downloading " ++ (show y))     
+            --  return ()
+        
+        
+   
+bufferContent :: TP.Buffer -> Conduit P.Peer IO P.Peer        
+bufferContent buffer =
+   do mPeer <- await
+      case mPeer of 
+           Nothing -> return ()
+           Just peer -> 
+              do let pB = P.buffer peer
+                     next = P.requestNext peer
+                 case pB of
+                      Nothing -> bufferContent buffer 
+                      Just (idx, offset, buff) ->
+                         do let newBuffer = buffer Seq.|> buff
+                            bufferContent newBuffer
+                 
+              {--
    do message <- await
       case message of
            Nothing -> return () 
