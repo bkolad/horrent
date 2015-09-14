@@ -18,7 +18,9 @@ main = do result <-runExceptT $ start "tom.torrent" 5 --"karl_marx.torrent" 1
                Right ps -> do ls<-mapM showPeer ps
                               print ls
                               
-                      
+
+                                   
+                              
       
 isInteger s = case reads s :: [(Integer, String)] of
   [(_, "")] -> True
@@ -29,6 +31,7 @@ app fN= do print fN
            cont <- B.readFile ("downloads/"++fN)       
            B.appendFile "fil.jpg" cont
       
+
       
 files = do allF <- getDirectoryContents "downloads/"
            let sortedFiles = sortOn (read :: String -> Int) $ filter isInteger allF

@@ -21,6 +21,8 @@ data Peer = Peer { hostName :: N.HostName
 instance Show Peer where
   show p = (hostName p) ++ " "++ (show $ port p) ++ " " ++ (show $ pieces p)                
                  
+                 
+                 
 fromBsToInt bs = 
    sum $ zipWith (\x y->x*2^y) (reverse ws) [0,8..]
    where 

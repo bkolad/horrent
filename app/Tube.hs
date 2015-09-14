@@ -21,7 +21,7 @@ import Data.Maybe
 
 type Perhaps a = Either String a          
   
-  
+
 sendHandshake :: B.ByteString ->  CN.AppData -> IO ()  
 sendHandshake infoHash appData = 
    yield handshake $$ CN.appSink appData 
@@ -97,7 +97,8 @@ recMessage peer appData = do
    message <- await
    case message of
         Nothing -> return ()
-        Just (M.Bitfield b) -> 
+        
+        Just (M.Bitfield b) ->
            do let pList = P.convertToBits b 
                   newPeer = peer {P.pieces = pList}
               liftIO $ sendInterested appData
@@ -107,17 +108,16 @@ recMessage peer appData = do
            do let pList = (P.fromBsToInt b) : P.pieces peer
                   newPeer = peer {P.pieces = pList}
               recMessage newPeer appData
-        
+                                                                            -- TODO use phantom types for peer validation
         Just M.UnChoke -> 
            do let newPeer = peer {P.unChoked = True}
               yield newPeer
               recMessage newPeer appData
         
         Just (M.Piece p@(idx,offset,content)) ->
-           do let newPeer = peer {P.buffer = Just p}
-              yield newPeer
-              --liftIO $ print newPeer
-              recMessage newPeer appData 
+            do let newPeer = peer {P.buffer = Just p}
+               yield newPeer
+               recMessage newPeer appData 
     
         Just M.Choke -> return ()
         
@@ -128,69 +128,44 @@ recMessage peer appData = do
         
         
    
-bufferContent :: TP.Buffer -> Conduit P.Peer IO P.Peer        
-bufferContent buffer =
+forwardContent :: CN.AppData -> Conduit P.Peer IO P.Peer  -- Last/NotLast (Idx, offset buff)         
+forwardContent appData =
    do mPeer <- await
       case mPeer of 
            Nothing -> return ()
            Just peer -> 
-              do let pB = P.buffer peer
-                     next = P.requestNext peer
-                 case pB of
-                      Nothing -> bufferContent buffer 
-                      Just (idx, offset, buff) ->
-                         do let newBuffer = buffer Seq.|> buff
-                            bufferContent newBuffer
-                 
-              {--
-   do message <- await
-      case message of
-           Nothing -> return () 
-            
-           Just (M.Bitfield b) -> 
               do 
-                 let pList = P.convertToBits b 
-                     newPeer = peer {P.pieces = pList}
-                 liftIO $ sendInterested appData
-                 recMessage newPeer appData
-           
-           Just (M.Have b) -> 
-              do 
-                 let pList = (P.fromBsToInt b) : P.pieces peer
-                     newPeer = peer {P.pieces = pList}
-                 recMessage newPeer appData
-          
-           Just M.UnChoke -> 
-              do
-                 nextPiece <- liftIO $ P.requestNext peer 
-                 case nextPiece of
-                      Nothing -> return ()
-                      Just x -> 
-                         do 
-                            yield peer
-                            liftIO $ sendRequest appData
-                            recMessage peer appData
-                       
-           --Just (Right (M.Piece (idx,offset,content))) ->
-             -- return ()
-          
-          
-           Just M.Choke -> 
-              liftIO $ print "M.Choke"
-           
-           Just y -> 
-              do 
-                 yield peer
-                 liftIO $ sendRequest appData
-                 recMessage peer appData --}
-                 
-                                                         
-                            
+                 next <- liftIO $ P.requestNext peer -- put global requested into STM
+                 let pB = P.buffer peer
+                 case (next, pB) of
+                      (Nothing, Nothing) -> return () 
+                      
+                      (Nothing, Just (idx, offset, buff)) -> do
+                         -- yield Last(idx, offset, buff)
+                         -- globald idx Done
+                          return ()
+                  
+                      
+                      (Just x, Nothing) -> do
+                         -- global x Requested
+                         -- sendReq x
+                         forwardContent appData
+                      
+                      
                          
-         
-
--- sinkH = awaitForever (liftIO . print . show)
-
+                      (Just x, Just (idx, offset, buff)) -> do
+                         -- sendReq x
+                         --yield (idx, offset, buff)
+                         -- global x Requested
+                         -- if x > idx, offset
+                               -- global idx Done 
+                         forwardContent appData 
+                            
+                            
+                            
+                            
+                            
+                      
 --sinkM :: Sink (Either String String) IO ()
 sinkM = awaitForever (liftIO . print . show)
    
@@ -214,6 +189,7 @@ tube peer appData =
                   $= (flushLeftOver messageAndLeftOver) 
                   =$= logParsingError
                   =$= (recMessage peer appData)
+                  =$= (forwardContent appData)
                   $$ sinkM  
                             
                             
