@@ -4,8 +4,6 @@ import qualified Data.Bits as Bits
 import qualified Data.ByteString as B
 import qualified Network as N
 import qualified Types as TP
-import qualified Data.Array.MArray as MA
-import qualified Control.Concurrent.STM as STM
 
 
 data Peer = Peer { hostName :: N.HostName
@@ -15,6 +13,7 @@ data Peer = Peer { hostName :: N.HostName
                  , globalStatus :: TP.GlobalPiceInfo
                  , unChoked :: Bool
                  , buffer :: Maybe (Int, Int, B.ByteString)
+                 , sizeInfo :: (TP.NumberOfPieces, TP.NormalPieceSize, TP.LastPieceSize)
                  }
 
                  
@@ -37,22 +36,11 @@ convertToBits bs =
     
   
   
-requestNext :: Peer -> IO (Maybe Int)
-requestNext peer =
-   STM.atomically $ let pics = pieces peer
-                        global = globalStatus peer
-                    in reqNext pics global
-  
+
+
+        
 
 
 
-reqNext :: [Int] -> TP.GlobalPiceInfo -> STM.STM (Maybe Int)  
-reqNext [] _ = return Nothing     
-reqNext (x:xs) global = 
-   do pInfo <- MA.readArray global x
-      case pInfo of
-           TP.NotHave    -> return $ Just x
-           TP.InProgress -> reqNext xs global
-           TP.Done       -> reqNext xs global
   
       

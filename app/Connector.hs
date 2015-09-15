@@ -19,7 +19,7 @@ import Network.HTTP.Base (urlEncodeVars)
 import Network.HTTP as HTTP
 import Control.Concurrent.Async as Async (mapConcurrently)
 import Control.Applicative
-import Types
+import Types as TP
 import qualified Control.Concurrent.STM.TQueue as TQ
 import Control.Monad.STM
 import Data.List
@@ -31,57 +31,55 @@ type TorrentContent = BP.BEncode
 logMsg a = liftIO $ print a          
           
           
-          
+                                                                                
 makePeers :: String -> ExceptT String IO [P.Peer]
 makePeers tracker = 
-    do torrentContent <-  BP.parseFromFile tracker
-       info@(numberOfPieces, maxP, maxLast) <- liftEither $ getSizeInfo torrentContent           
-       globalStatus    <- liftIO $ newGlobalBitField numberOfPieces     
-       ipsAndPorts <- peersIpAndPortsFromTracker torrentContent           
-       infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
-       let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus False Nothing) ipsAndPorts
-       return peers 
-      
+  do torrentContent <-  BP.parseFromFile tracker
+     info@(numberOfPieces, _, _) <- liftEither $ getSizeInfo torrentContent           
+     globalStatus    <- liftIO $ newGlobalBitField numberOfPieces     
+     ipsAndPorts <- peersIpAndPortsFromTracker torrentContent           
+     infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
+     let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus False Nothing info) ipsAndPorts
+     return peers 
+    
+    
 
+      
+      
 getInfoHash :: String -> ExceptT String IO B.ByteString
 getInfoHash tracker = 
      do torrentContent <-  BP.parseFromFile tracker  
         infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
         return infoHash
        
---   -----------------------------------    
-    
- 
- 
-type NumberOfPieces = Int
-type NormalPieceSize = Int
-type LastPieceSize = Int
+       
+         
+getSizeInfo :: 
+    TorrentContent -> 
+    Either String (TP.NumberOfPieces, TP.NormalPieceSize, TP.LastPieceSize)
+getSizeInfo torrentContent =
+  do pieceSize   <- BP.piceSize torrentContent
+     torrentSize <- BP.torrentSize torrentContent           
+     return $ getSizeData torrentSize pieceSize  
+       where
+         getSizeData torrentSize pieceSize =
+           let tSize = fromIntegral torrentSize
+               pSize = fromIntegral pieceSize
+               numberOfPieces = ceiling $ tSize / pSize
+               lastPieceSize = tSize `mod` pSize
+           in (numberOfPieces, pSize, lastPieceSize)
 
-
-getSizeInfo :: TorrentContent -> Either String (NumberOfPieces, NormalPieceSize, LastPieceSize)
-getSizeInfo torrentContent = 
-    do pieceSize   <- BP.piceSize torrentContent
-       torrentSize <- BP.torrentSize torrentContent           
-       let info@(nP, maxP, maxLast) = getSizeData torrentSize pieceSize  
-       return info
-    where
-          getSizeData torrentSize pieceSize = 
-               let tSize = fromIntegral torrentSize
-                   pSize = fromIntegral pieceSize
-                   numberOfPieces = ceiling $ tSize / pSize
-                   lastPSize = tSize `mod` pSize
-               in (numberOfPieces, pSize, lastPSize)
-  
 
   
-peersIpAndPortsFromTracker :: TorrentContent -> ExceptT String IO [(N.HostName, N.PortNumber)]
+peersIpAndPortsFromTracker :: 
+    TorrentContent 
+    -> ExceptT String IO [(N.HostName, N.PortNumber)]
 peersIpAndPortsFromTracker torrentContent = 
-    do urlTracker  <- liftEither $ trackerUrl torrentContent
-       resp <- liftIO . getResponseFromTracker $ urlTracker
-       peersBS <- liftEither $ (BP.parseFromBS . BC.pack $ resp) >>= BP.peers
-       let ipsAndPorts =  getIPandPort peersBS
-       return ipsAndPorts
-
+    do urlTracker <- liftEither $ trackerUrl torrentContent
+       resp       <- liftIO . getResponseFromTracker $ urlTracker
+       peersBS    <- liftEither $ (BP.parseFromBS . BC.pack $ resp) >>= BP.peers
+       return $ getIPandPort peersBS
+       
        
        
 type TrackerResponse = String       

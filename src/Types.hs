@@ -1,11 +1,15 @@
-module Types (GlobalPiceInfo
-              ,newGlobalBitField
-              ,PiceInfo(..)
-              ,Buffer
-              ,liftEither
-              ,ExceptT
-              ,liftIO
-              ,runExceptT) where
+module Types  ( GlobalPiceInfo
+              , newGlobalBitField
+              , PiceInfo(..)
+              , Buffer
+              , liftEither
+              , ExceptT
+              , liftIO
+              , runExceptT
+              , NumberOfPieces
+              , NormalPieceSize
+              , LastPieceSize
+              ) where
 
 
 import qualified Control.Concurrent.STM.TArray as TA
@@ -15,6 +19,12 @@ import Control.Concurrent.STM
 import Data.Array.MArray
 import Control.Monad.Trans.Except
 import Control.Monad.IO.Class (liftIO)
+
+
+ 
+type NumberOfPieces = Int
+type NormalPieceSize = Int
+type LastPieceSize = Int
 
 
 data PiceInfo = Done | InProgress | NotHave 

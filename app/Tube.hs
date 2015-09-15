@@ -14,6 +14,8 @@ import qualified Peer as P
 import qualified Control.Concurrent as CC
 import qualified Data.Sequence as Seq
 import qualified Types as TP
+import qualified Data.Array.MArray as MA
+import qualified Control.Concurrent.STM as STM
 import Control.Monad.Trans.Resource
 import Data.Conduit
 import Data.Maybe
@@ -94,76 +96,105 @@ blabla = foo
   
 recMessage :: P.Peer -> CN.AppData -> Conduit M.Message IO P.Peer    -- TODO recurse always check req next in sinq --? -- replace 
 recMessage peer appData = do
-   message <- await
-   case message of
-        Nothing -> return ()
-        
-        Just (M.Bitfield b) ->
-           do let pList = P.convertToBits b 
-                  newPeer = peer {P.pieces = pList}
-              liftIO $ sendInterested appData
-              recMessage newPeer appData
-                 
-        Just (M.Have b) -> 
-           do let pList = (P.fromBsToInt b) : P.pieces peer
-                  newPeer = peer {P.pieces = pList}
-              recMessage newPeer appData
-                                                                            -- TODO use phantom types for peer validation
-        Just M.UnChoke -> 
-           do let newPeer = peer {P.unChoked = True}
-              yield newPeer
-              recMessage newPeer appData
-        
-        Just (M.Piece p@(idx,offset,content)) ->
-            do let newPeer = peer {P.buffer = Just p}
-               yield newPeer
-               recMessage newPeer appData 
-    
-        Just M.Choke -> return ()
-        
-        Just y -> 
-           do liftIO $ 
-                 print ("This message should not arrive while downloading " ++ (show y))     
-            --  return ()
-        
-        
+  message <- await
+  case message of
+       Nothing -> return ()
+      
+       Just (M.Bitfield b) ->
+         do let pList = P.convertToBits b 
+                newPeer = peer {P.pieces = pList}
+            liftIO $ sendInterested appData
+            recMessage newPeer appData
+              
+       Just (M.Have b) -> 
+         do let pList = (P.fromBsToInt b) : P.pieces peer
+                newPeer = peer {P.pieces = pList}
+            recMessage newPeer appData
+                                                                          -- TODO use phantom types for peer validation
+       Just M.UnChoke -> 
+         do let newPeer = peer {P.unChoked = True}
+            yield newPeer
+            recMessage newPeer appData
+      
+       Just (M.Piece p@(idx,offset,content)) ->
+         do let newPeer = peer {P.buffer = Just p}
+            yield newPeer
+            recMessage newPeer appData 
+  
+       Just M.Choke -> return ()
+      
+       Just y -> 
+         do liftIO $ 
+              print ("This message should not arrive while downloading " ++ (show y))     
+          --  return ()
+      
+      
    
 forwardContent :: CN.AppData -> Conduit P.Peer IO P.Peer  -- Last/NotLast (Idx, offset buff)         
 forwardContent appData =
-   do mPeer <- await
-      case mPeer of 
-           Nothing -> return ()
-           Just peer -> 
-              do 
-                 next <- liftIO $ P.requestNext peer -- put global requested into STM
-                 let pB = P.buffer peer
-                 case (next, pB) of
-                      (Nothing, Nothing) -> return () 
+  do mPeer <- await
+     case mPeer of 
+          Nothing -> return ()
+          Just peer -> 
+            do let pB = P.buffer peer
+                   global = P.globalStatus peer
+                   peerPieces = P.pieces peer
+               next <- liftIO $ requestNextAndUpdateGlobal peerPieces global 
+               case (next, pB) of
+                    (Nothing, Nothing) -> return () 
+                    
+                    (Nothing, Just (idx, offset, buff)) -> do
+                      -- yield Last(idx, offset, buff)
+                      liftIO $ setStatus idx global TP.Done
+                      return ()
+                                  
+                    (Just x, Nothing) -> do
+                      liftIO $ sendRequest appData (x, 0, 32)
+                      liftIO $ setStatus x global TP.InProgress
+                      forwardContent appData
+                             
+                    (Just x, Just (idx, offset, buff)) -> do
+                      -- 
+                        -- sendReq x
+                        -- global x Requested
+                        -- if x > idx, offset
+                              -- global idx Done
+                              --yield Last
+                      --       else
+                              --yield (idx, offset, buff)
                       
-                      (Nothing, Just (idx, offset, buff)) -> do
-                         -- yield Last(idx, offset, buff)
-                         -- globald idx Done
-                          return ()
-                  
-                      
-                      (Just x, Nothing) -> do
-                         -- global x Requested
-                         -- sendReq x
-                         forwardContent appData
-                      
-                      
-                         
-                      (Just x, Just (idx, offset, buff)) -> do
-                         -- sendReq x
-                         --yield (idx, offset, buff)
-                         -- global x Requested
-                         -- if x > idx, offset
-                               -- global idx Done 
-                         forwardContent appData 
-                            
-                            
-                            
-                            
+                        forwardContent appData 
+
+
+  
+  
+setStatusDone :: Int -> TP.GlobalPiceInfo -> IO()
+setStatusDone x global = 
+  STM.atomically $ MA.writeArray global x TP.Done 
+
+
+  
+setStatus :: Int -> TP.GlobalPiceInfo -> TP.PiceInfo -> IO()
+setStatus x global status = 
+  STM.atomically $ MA.writeArray global x status 
+  
+  
+requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)
+requestNextAndUpdateGlobal pics global =
+  STM.atomically $ reqNext pics global
+    where
+      reqNext :: [Int] -> TP.GlobalPiceInfo -> STM.STM (Maybe Int)  
+      reqNext [] _ = return Nothing     
+      reqNext (x:xs) global = 
+        do pInfo <- MA.readArray global x
+           case pInfo of
+                TP.NotHave -> 
+                    do MA.writeArray global x TP.InProgress 
+                       return $ Just x
+                TP.InProgress -> reqNext xs global
+                TP.Done -> reqNext xs global
+
+                    
                             
                       
 --sinkM :: Sink (Either String String) IO ()
@@ -227,5 +258,5 @@ flushLeftOver fun = awaitForever $ process fun
 sendInterested :: CN.AppData -> IO() 
 sendInterested appData = yield (M.encodeMessage M.Interested) $$ CN.appSink appData  
 
-sendRequest :: CN.AppData -> IO() 
-sendRequest appData = yield (M.encodeMessage $ M.Request (0,0,32)) $$ CN.appSink appData  
+sendRequest :: CN.AppData -> (Int, Int, Int)-> IO() 
+sendRequest appData req = yield (M.encodeMessage $ M.Request req) $$ CN.appSink appData  
