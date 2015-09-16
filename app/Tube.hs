@@ -30,23 +30,59 @@ sendHandshake infoHash appData =
    where      
       handshake = H.createHandshake infoHash
       
-    
       
-recHandshake :: Monad m => Sink BC.ByteString m (Perhaps (BC.ByteString, H.Handshake)) -- <-- replace IO by Either
+recHandshake :: Sink BC.ByteString IO (Perhaps (BC.ByteString, H.Handshake)) -- <-- replace IO by Either
 recHandshake = 
    do handM <- await
+      liftIO $ print $ "GOTHS LL  " ++ (show(length handM))
       case handM of
-           Nothing -> return $ Left "No handshake"                               
-           Just hand -> return $ convertHandshake hand
+           Nothing -> do liftIO $ print "BADHS" 
+                         return $ Left "No handshake" 
+                         
+           Just hand -> do liftIO $ print "HSOK" 
+                           return $ convertHandshake hand
       where 
             convertHandshake = convertParsedOutput . H.decodeHandshake 
             convertParsedOutput x = 
                do case x of
                        Left (_, _, e) -> Left $ "Problem with parsing handshake " ++ (show e)
-                       Right (leftOver, _, h) -> Right $ (BL.toStrict leftOver,  h)
+                       Right (leftOver, _, h) -> 
+                         do Right $ (BL.toStrict leftOver,  h)
      
      
      
+    
+  
+  
+{-  
+recHandshake :: Bool ->Sink BC.ByteString IO (Perhaps (BC.ByteString, H.Handshake)) -- <-- replace IO by Either
+recHandshake b = 
+   do handM <- await
+      liftIO $ print $ "GOTHS LL  " ++ (show(length handM))
+      
+          
+      case handM of
+           Nothing -> do liftIO $ print "BADHS" 
+                         return $ Left "No handshake" 
+                         recHandshake True
+                         
+           Just hand -> do liftIO $ print "HSOK" 
+                        --   return $ convertHandshake hand
+                           if b 
+                              then liftIO $ print $ M.decodeMessage hand
+                              else return ()
+ 
+                           recHandshake True
+      where 
+            convertHandshake = convertParsedOutput . H.decodeHandshake 
+            convertParsedOutput x = 
+               do case x of
+                       Left (_, _, e) -> Left $ "Problem with parsing handshake " ++ (show e)
+                       Right (leftOver, _, h) -> 
+                         do Right $ (BL.toStrict leftOver,  h)
+     
+     
+--}     
 
 
 logParsingError :: Conduit (Perhaps M.Message) IO M.Message                                
@@ -54,74 +90,58 @@ logParsingError =
   do message <- await
      case message of
            Nothing -> return ()       
-           Just (Left x) -> 
+           Just (Left x) -> do
               liftIO $ print ("Parsing Error " ++ (show x))
+              logParsingError
            Just (Right x) -> 
               do yield x
                  logParsingError 
            
 
  
-class Fooable a where
-   foo :: a -> String 
- 
-data Initialized 
-data NotInitialized 
- 
-data P a = P Int
- 
- 
-instance Fooable (P Initialized) where
-  foo (P x) = ("Init " ++ (show x))
-  
-  
---instance Fooable (P NotInitialized) where
---  foo (P x) = ("NOT INIT" ++ (show x)) 
- 
-
-i :: P Initialized
-i = P 3
-
-n :: P NotInitialized
-n = P 5
-  
-convert :: P NotInitialized -> P Initialized
-convert (P x) = P x
- 
- 
-blabla :: (Fooable a) => a -> String
-blabla = foo
-        
-        
-  
 recMessage :: P.Peer -> CN.AppData -> Conduit M.Message IO P.Peer    -- TODO recurse always check req next in sinq --? -- replace 
 recMessage peer appData = do
   message <- await
+ 
+  let time = 100000
   case message of
-       Nothing -> return ()
+       Nothing -> do liftIO $ print "NOTHING"
+                     return ()
       
        Just (M.Bitfield b) ->
-         do let pList = P.convertToBits b 
+         do liftIO $ print "BF"
+            let pList = P.convertToBits b 
                 newPeer = peer {P.pieces = pList}
+            liftIO $ CC.threadDelay time
             liftIO $ sendInterested appData
             recMessage newPeer appData
               
        Just (M.Have b) -> 
-         do let pList = (P.fromBsToInt b) : P.pieces peer
-                newPeer = peer {P.pieces = pList}
+         do liftIO $ print "Have"  
+            let pList = (P.fromBsToInt b) : P.pieces peer
+                newPeer = peer {P.pieces = pList}  
             recMessage newPeer appData
                                                                           -- TODO use phantom types for peer validation
        Just M.UnChoke -> 
-         do let newPeer = peer {P.unChoked = True}
+         do 
+            liftIO $  print "UnChoke"
+            let newPeer = peer {P.unChoked = True}
             yield newPeer
+            liftIO $ CC.threadDelay time
             recMessage newPeer appData
       
        Just (M.Piece p@(idx,offset,content)) ->
-         do let newPeer = peer {P.buffer = Just p}
+         do liftIO $  print "Piece"
+            let newPeer = peer {P.buffer = Just p}
             yield newPeer
+            liftIO $ CC.threadDelay time
             recMessage newPeer appData 
   
        Just M.Choke -> return ()
+      
+       Just M.KeepAlive -> 
+         do liftIO $ print "KeepAlive" 
+            recMessage peer appData
       
        Just y -> 
          do liftIO $ 
@@ -132,28 +152,43 @@ recMessage peer appData = do
    
 forwardContent :: CN.AppData -> Conduit P.Peer IO P.Peer  -- Last/NotLast (Idx, offset buff)         
 forwardContent appData =
-  do mPeer <- await
+  do liftIO $ print "Expecting BF"
+     mPeer <- await
      case mPeer of 
           Nothing -> return ()
           Just peer -> 
-            do let pB = P.buffer peer
+            do liftIO $ print "--"
+               let pB = P.buffer peer
                    global = P.globalStatus peer
                    peerPieces = P.pieces peer
+                   infoSize = P.sizeInfo peer
                next <- liftIO $ requestNextAndUpdateGlobal peerPieces global 
                case (next, pB) of
-                    (Nothing, Nothing) -> return () 
+                    (Nothing, Nothing) -> do
+                      liftIO $ print "EXIT"
+                      return () 
                     
                     (Nothing, Just (idx, offset, buff)) -> do
                       -- yield Last(idx, offset, buff)
                       liftIO $ setStatus idx global TP.Done
                       return ()
                                   
-                    (Just x, Nothing) -> do
-                      liftIO $ sendRequest appData (x, 0, 32)
-                      liftIO $ setStatus x global TP.InProgress
+                    (Just next, Nothing) -> do
+                      liftIO $ print "REQ 0"
+                      let size = getSize next infoSize
+                      liftIO $ CC.threadDelay 100000
+                      liftIO $ sendRequest appData (0, 0, 1)
+                      liftIO $ setStatus next global TP.InProgress
                       forwardContent appData
                              
-                    (Just x, Just (idx, offset, buff)) -> do
+                    (Just next, Just (idx, offset, buff)) -> do      
+                      liftIO $ print "GOT"
+                      let size = getSize next infoSize
+                      liftIO $ print ( (show idx) ++" arrived "++(show(B.length buff)))
+                      liftIO $ CC.threadDelay 100000
+                      
+                      liftIO $ sendRequest appData (0, 0, 16384)
+                      
                       -- 
                         -- sendReq x
                         -- global x Requested
@@ -163,9 +198,13 @@ forwardContent appData =
                       --       else
                               --yield (idx, offset, buff)
                       
-                        forwardContent appData 
+                      forwardContent appData 
 
 
+getSize next  (nbOfPieces, normalSize, lastSize) =
+  if (next == nbOfPieces -1)
+     then lastSize
+     else normalSize
   
   
 setStatusDone :: Int -> TP.GlobalPiceInfo -> IO()
@@ -197,7 +236,7 @@ requestNextAndUpdateGlobal pics global =
                     
                             
                       
---sinkM :: Sink (Either String String) IO ()
+sinkM :: Sink P.Peer IO ()
 sinkM = awaitForever (liftIO . print . show)
    
    
@@ -207,30 +246,63 @@ generiCSource source lo =
   
   
 -- ((addCleanup (const $ liftIO $ putStrLn "Stopping")) $ source)  
-  
+ 
+ 
+logMSG :: Conduit BC.ByteString IO BC.ByteString   
+logMSG = do
+  liftIO $ print "GOT MSG"
+  m <- await
+  case m of
+       Nothing -> return ()
+       Just x -> 
+         do liftIO $ print ("REC " ++ (show (B.length x)))
+            yield x
+            logMSG       
+
+
 tube :: P.Peer -> CN.AppData -> IO ()  
 tube peer appData = 
-   do sendHandshake (P.infoHash peer) appData
-      let source = (addCleanup (const $ liftIO $ putStrLn "Stopping")) $ CN.appSource (appData)
-      leftOver <-  source $$ recHandshake
-      case leftOver of
-         Left l -> print l
-         Right (lo, h) -> 
-              do generiCSource source lo
-                  $= (flushLeftOver messageAndLeftOver) 
-                  =$= logParsingError
-                  =$= (recMessage peer appData)
-                  =$= (forwardContent appData)
-                  $$ sinkM  
-                            
-                            
-    
+   do liftIO $ print "ENTER"
+      sendHandshake (P.infoHash peer) appData
+      let source = (addCleanup (const $ liftIO $ putStrLn "Stopping ---")) $ CN.appSource (appData)
+                 
+      (s1, res) <- source $$+ recHandshake
+      
+      let ss = case res of
+                    Left l -> message (B.empty)
+                    Right (lo, h) -> message lo
+                    
+      let cc = ss
+               =$= logMSG
+               =$= (flushLeftOver messageAndLeftOver) 
+               =$= logParsingError 
+               =$= (recMessage peer appData)
+               =$= (forwardContent appData) 
+          
+      (s1 $=+ cc) $$+- sinkM 
+        
+
+message :: BC.ByteString -> Conduit BC.ByteString IO BC.ByteString        
+message lo = do
+           if ((not . B.null) lo)
+              then do yield lo    
+                      message (B.empty)
+              else do k <- await
+                      case k of
+                           Nothing -> return ()
+                           Just b -> do yield b
+                                        message (B.empty)
+                                        
+                      
+                           
+  
+  
     
 messageAndLeftOver :: BC.ByteString -> (Maybe BC.ByteString, Perhaps M.Message)  
-messageAndLeftOver x = 
+messageAndLeftOver x = do
     case (M.decodeMessage x) of     
          Left (lo, idx, errorM) -> 
-              (Nothing, Left $ "HORRENT PARSING ERROR: " ++(show lo) ++" "++(show idx)++" " ++ errorM)    
+              (Nothing, Left $ "HORRENT PARSING ERROR: " ++(show(BL.length lo)) ++" "++(show(B.length x)) ++" "++(show idx)++" " ++ errorM)    
          Right (lo, idx, m) -> do
               if ((not . BL.null) lo) 
                  then ((Just $ BL.toStrict lo), Right m)
@@ -239,7 +311,7 @@ messageAndLeftOver x =
                   
  
 -- Combinator 
-flushLeftOver :: Monad m => (r -> ((Maybe r), k)) -> Conduit r m k  
+flushLeftOver :: (BC.ByteString -> ((Maybe BC.ByteString), k)) -> Conduit BC.ByteString IO k  
 flushLeftOver fun = awaitForever $ process fun
     where   
           process fun f =  
