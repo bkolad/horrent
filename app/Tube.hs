@@ -36,55 +36,17 @@ recHandshake =
    do handM <- await
       liftIO $ print $ "GOTHS LL  " ++ (show(length handM))
       case handM of
-           Nothing -> do liftIO $ print "BADHS" 
-                         return $ Left "No handshake" 
-                         
-           Just hand -> do liftIO $ print "HSOK" 
-                           return $ convertHandshake hand
-      where 
+           Nothing -> return $ Left "No handshake"    
+           Just hand -> return $ convertHandshake hand
+          where 
             convertHandshake = convertParsedOutput . H.decodeHandshake 
             convertParsedOutput x = 
                do case x of
                        Left (_, _, e) -> Left $ "Problem with parsing handshake " ++ (show e)
-                       Right (leftOver, _, h) -> 
-                         do Right $ (BL.toStrict leftOver,  h)
+                       Right (leftOver, _, h) ->  Right $ (BL.toStrict leftOver,  h)
      
      
      
-    
-  
-  
-{-  
-recHandshake :: Bool ->Sink BC.ByteString IO (Perhaps (BC.ByteString, H.Handshake)) -- <-- replace IO by Either
-recHandshake b = 
-   do handM <- await
-      liftIO $ print $ "GOTHS LL  " ++ (show(length handM))
-      
-          
-      case handM of
-           Nothing -> do liftIO $ print "BADHS" 
-                         return $ Left "No handshake" 
-                         recHandshake True
-                         
-           Just hand -> do liftIO $ print "HSOK" 
-                        --   return $ convertHandshake hand
-                           if b 
-                              then liftIO $ print $ M.decodeMessage hand
-                              else return ()
- 
-                           recHandshake True
-      where 
-            convertHandshake = convertParsedOutput . H.decodeHandshake 
-            convertParsedOutput x = 
-               do case x of
-                       Left (_, _, e) -> Left $ "Problem with parsing handshake " ++ (show e)
-                       Right (leftOver, _, h) -> 
-                         do Right $ (BL.toStrict leftOver,  h)
-     
-     
---}     
-
-
 logParsingError :: Conduit (Perhaps M.Message) IO M.Message                                
 logParsingError =
   do message <- await
@@ -166,10 +128,15 @@ forwardContent appData =
                case (next, pB) of
                     (Nothing, Nothing) -> do
                       liftIO $ print "EXIT"
+                   --   liftIO $ print global
+                      
                       return () 
                     
                     (Nothing, Just (idx, offset, buff)) -> do
                       -- yield Last(idx, offset, buff)
+                      liftIO $ print "DONE"
+                      liftIO $ printArray global
+                         
                       liftIO $ setStatus idx global TP.Done
                       return ()
                                   
@@ -185,11 +152,11 @@ forwardContent appData =
                       liftIO $ print "GOT"
                       let size = getSize next infoSize
                       liftIO $ print ( (show idx) ++" arrived "++(show(B.length buff)))
-                      liftIO $ CC.threadDelay 100000
+                    --  liftIO $ CC.threadDelay 1000000
                       
                       liftIO $ sendRequest appData (0, 0, 16384)
                       
-                      -- 
+                      -- https://phabricator.haskell.org/rGHC8ecf6d8f7dfee9e5b1844cd196f83f00f3b6b879
                         -- sendReq x
                         -- global x Requested
                         -- if x > idx, offset
@@ -200,6 +167,12 @@ forwardContent appData =
                       
                       forwardContent appData 
 
+printArray :: TP.GlobalPiceInfo -> IO()                      
+printArray global = do 
+  k <- STM.atomically $ MA.getElems global
+  print k
+
+                                                            
 
 getSize next  (nbOfPieces, normalSize, lastSize) =
   if (next == nbOfPieces -1)
@@ -274,7 +247,7 @@ tube peer appData =
                     
       let cc = ss
                =$= logMSG
-               =$= (flushLeftOver messageAndLeftOver) 
+               =$= decodeMessage (B.empty)-- (flushLeftOver messageAndLeftOver) 
                =$= logParsingError 
                =$= (recMessage peer appData)
                =$= (forwardContent appData) 
@@ -296,33 +269,20 @@ message lo = do
                       
                            
   
-  
-    
-messageAndLeftOver :: BC.ByteString -> (Maybe BC.ByteString, Perhaps M.Message)  
-messageAndLeftOver x = do
-    case (M.decodeMessage x) of     
-         Left (lo, idx, errorM) -> 
-              (Nothing, Left $ "HORRENT PARSING ERROR: " ++(show(BL.length lo)) ++" "++(show(B.length x)) ++" "++(show idx)++" " ++ errorM)    
-         Right (lo, idx, m) -> do
-              if ((not . BL.null) lo) 
-                 then ((Just $ BL.toStrict lo), Right m)
-                 else (Nothing, Right m)    
+decodeMessage ::B.ByteString ->  Conduit BC.ByteString IO (Perhaps M.Message)
+decodeMessage buff= do
+  xM <- await 
+  case xM of
+       Nothing -> return ()
+       Just x -> do let nB = B.append buff x
+                    case (M.decodeMessage nB ) of     
+                         Left (lo, idx, errorM) ->  decodeMessage nB           -- TODO match on partial parser
+                         Right (lo, idx, m) -> do
+                                                  yield (Right m)
+                                                  decodeMessage B.empty
+      
 
-                  
- 
--- Combinator 
-flushLeftOver :: (BC.ByteString -> ((Maybe BC.ByteString), k)) -> Conduit BC.ByteString IO k  
-flushLeftOver fun = awaitForever $ process fun
-    where   
-          process fun f =  
-              do let (loM, k) = fun f
-                 yield k    
-                 case loM of 
-                      Nothing -> flushLeftOver fun 
-                      Just lo -> leftover lo 
-                      
- 
- 
+   
  
                       
                       

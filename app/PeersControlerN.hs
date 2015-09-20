@@ -25,7 +25,7 @@ import qualified Types as TP
 
 
 main::IO() 
-main = do result <- runExceptT $ start "ubuntu.torrent"  -- "tom.torrent"--
+main = do result <- runExceptT $ start  "tom.torrent"--"ubuntu.torrent"  -- "tom.torrent"--
           print result
 
           
@@ -33,7 +33,7 @@ main = do result <- runExceptT $ start "ubuntu.torrent"  -- "tom.torrent"--
 start :: String -> ExceptT String IO ()
 start tracker = 
      do peers  <-  CN.makePeers tracker
-        let peer = peers !! 2
+        let peer = peers !! 1
         liftIO $ print peers   
         liftIO $ runClient peer
         return ()
