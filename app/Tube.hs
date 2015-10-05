@@ -65,16 +65,14 @@ recMessage :: P.Peer -> CN.AppData -> Conduit M.Message IO P.Peer    -- TODO rec
 recMessage peer appData = do
   message <- await
  
-  let time = 100000
   case message of
-       Nothing -> do liftIO $ print "NOTHING"
+       Nothing -> do liftIO $ print "NOTHING NO MESSAGE"
                      return ()
       
        Just (M.Bitfield b) ->
          do liftIO $ print "BF"
             let pList = P.convertToBits b 
                 newPeer = peer {P.pieces = pList}
-            liftIO $ CC.threadDelay time
             liftIO $ sendInterested appData
             recMessage newPeer appData
               
@@ -89,14 +87,12 @@ recMessage peer appData = do
             liftIO $  print "UnChoke"
             let newPeer = peer {P.unChoked = True}
             yield newPeer
-            liftIO $ CC.threadDelay time
             recMessage newPeer appData
       
        Just (M.Piece p@(idx,offset,content)) ->
          do liftIO $  print "Piece"
             let newPeer = peer {P.buffer = Just p}
             yield newPeer
-            liftIO $ CC.threadDelay time
             recMessage newPeer appData 
   
        Just M.Choke -> return ()
@@ -114,7 +110,7 @@ recMessage peer appData = do
    
 forwardContent :: CN.AppData -> Conduit P.Peer IO P.Peer  -- Last/NotLast (Idx, offset buff)         
 forwardContent appData =
-  do liftIO $ print "Expecting BF"
+  do -- liftIO $ print "Expecting BF"
      mPeer <- await
      case mPeer of 
           Nothing -> return ()
@@ -128,23 +124,18 @@ forwardContent appData =
                case (next, pB) of
                     (Nothing, Nothing) -> do
                       liftIO $ print "EXIT"
-                   --   liftIO $ print global
-                      
                       return () 
                     
                     (Nothing, Just (idx, offset, buff)) -> do
-                      -- yield Last(idx, offset, buff)
-                      liftIO $ print "DONE"
-                      liftIO $ printArray global
-                         
-                      liftIO $ setStatus idx global TP.Done
+                      liftIO $ print $ "DONE " ++ (show idx)         
+                      liftIO $ setStatus idx global TP.Done             
+                      yield peer
                       return ()
                                   
                     (Just next, Nothing) -> do
                       liftIO $ print "REQ 0"
                       let size = getSize next infoSize
-                      liftIO $ CC.threadDelay 100000
-                      liftIO $ sendRequest appData (0, 0, 1)
+                      liftIO $ sendRequest appData (0, 0, size)
                       liftIO $ setStatus next global TP.InProgress
                       forwardContent appData
                              
@@ -152,29 +143,21 @@ forwardContent appData =
                       liftIO $ print "GOT"
                       let size = getSize next infoSize
                       liftIO $ print ( (show idx) ++" arrived "++(show(B.length buff)))
-                    --  liftIO $ CC.threadDelay 1000000
-                      
-                      liftIO $ sendRequest appData (0, 0, 16384)
-                      
-                      -- https://phabricator.haskell.org/rGHC8ecf6d8f7dfee9e5b1844cd196f83f00f3b6b879
-                        -- sendReq x
-                        -- global x Requested
-                        -- if x > idx, offset
-                              -- global idx Done
-                              --yield Last
-                      --       else
-                              --yield (idx, offset, buff)
+                      liftIO $ setStatus idx global TP.Done
+                      liftIO $ sendRequest appData (next, 0, size)
+                      yield peer
+                  
                       
                       forwardContent appData 
 
 printArray :: TP.GlobalPiceInfo -> IO()                      
 printArray global = do 
   k <- STM.atomically $ MA.getElems global
-  print k
+  print $ zip k [0..]
 
                                                             
 
-getSize next  (nbOfPieces, normalSize, lastSize) =
+getSize next (nbOfPieces, normalSize, lastSize) =
   if (next == nbOfPieces -1)
      then lastSize
      else normalSize
@@ -210,7 +193,9 @@ requestNextAndUpdateGlobal pics global =
                             
                       
 sinkM :: Sink P.Peer IO ()
-sinkM = awaitForever (liftIO . print . show)
+sinkM = awaitForever (\p -> liftIO $ 
+  do  print "sinkM"
+      printArray (P.globalStatus p))
    
    
 generiCSource source lo =
@@ -223,7 +208,7 @@ generiCSource source lo =
  
 logMSG :: Conduit BC.ByteString IO BC.ByteString   
 logMSG = do
-  liftIO $ print "GOT MSG"
+--  liftIO $ print "GOT MSG"
   m <- await
   case m of
        Nothing -> return ()
