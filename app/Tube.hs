@@ -16,6 +16,7 @@ import qualified Data.Sequence as Seq
 import qualified Types as TP
 import qualified Data.Array.MArray as MA
 import qualified Control.Concurrent.STM as STM
+import qualified Crypto.Hash.SHA1 as SHA1 
 import Control.Monad.Trans.Resource
 import Data.Conduit
 import Data.Maybe
@@ -128,7 +129,9 @@ forwardContent appData =
                     
                     (Nothing, Just (idx, offset, buff)) -> do
                       liftIO $ print $ "DONE " ++ (show idx)         
-                      liftIO $ setStatus idx global TP.Done             
+                      liftIO $ setStatus idx global TP.Done    
+                      liftIO $ print $ Seq.index (P.peceHashes peer) idx == SHA1.hash buff
+                    
                       yield peer
                       return ()
                                   
@@ -143,7 +146,11 @@ forwardContent appData =
                       liftIO $ print "GOT"
                       let size = getSize next infoSize
                       liftIO $ print ( (show idx) ++" arrived "++(show(B.length buff)))
+                      liftIO $ print $ Seq.index (P.peceHashes peer) idx == SHA1.hash buff
+                      
                       liftIO $ setStatus idx global TP.Done
+                      
+                      
                       liftIO $ sendRequest appData (next, 0, size)
                       yield peer
                   
