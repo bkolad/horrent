@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
-import PeersControler (start)
-import Peer (showPeer)
+-- import PeersControler (start)
+-- import Peer (showPeer)
 import Types
 import System.Directory
 import qualified Data.List as L
@@ -11,6 +11,7 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Control.Monad as M
 import Control.Applicative
 
+{--
 main::IO() 
 main = do result <-runExceptT $ start "tom.torrent" 5 --"karl_marx.torrent" 1
           case result of
@@ -20,7 +21,7 @@ main = do result <-runExceptT $ start "tom.torrent" 5 --"karl_marx.torrent" 1
                               
 
                                    
-                              
+                                   --}                    
       
 isInteger s = case reads s :: [(Integer, String)] of
   [(_, "")] -> True

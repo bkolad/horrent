@@ -9,6 +9,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.Conduit.Network as CN
+import qualified Data.Conduit.Binary as CB
 import qualified Data.Bits as Bits
 import qualified Peer as P
 import qualified Control.Concurrent as CC
@@ -47,22 +48,34 @@ recHandshake =
                        Right (leftOver, _, h) ->  Right $ (BL.toStrict leftOver,  h)
      
      
-     
+ 
+ 
+decodeMessage ::B.ByteString ->  Conduit BC.ByteString IO (Perhaps M.Message)
+decodeMessage buff= do
+  xM <- await 
+  case xM of
+       Nothing -> return ()
+       Just x -> do let nB = B.append buff x
+                    case (M.decodeMessage nB ) of     
+                         Left (lo, idx, errorM) ->  decodeMessage nB           -- TODO match on partial parser
+                         Right (lo, idx, m) -> do
+                                                  yield (Right m)
+                                                  decodeMessage B.empty
+ 
+ 
+
 logParsingError :: Conduit (Perhaps M.Message) IO M.Message                                
 logParsingError =
-  do message <- await
-     case message of
-           Nothing -> return ()       
-           Just (Left x) -> do
-              liftIO $ print ("Parsing Error " ++ (show x))
-              logParsingError
-           Just (Right x) -> 
-              do yield x
-                 logParsingError 
-           
-
+  awaitForever filterFailure
+  where
+    filterFailure =
+      either (liftIO . print . errorMessage) 
+             (yield)
+    errorMessage f = "Parsing Error " ++ (show f)
+      
+      
  
-recMessage :: P.Peer -> CN.AppData -> Conduit M.Message IO P.Peer    -- TODO recurse always check req next in sinq --? -- replace 
+recMessage :: P.Peer -> CN.AppData -> Conduit M.Message IO P.Peer    
 recMessage peer appData = do
   message <- await
  
@@ -109,7 +122,7 @@ recMessage peer appData = do
       
       
    
-forwardContent :: CN.AppData -> Conduit P.Peer IO P.Peer  -- Last/NotLast (Idx, offset buff)         
+forwardContent :: CN.AppData -> Conduit P.Peer IO (String, BC.ByteString)--P.Peer  -- Last/NotLast (Idx, offset buff)         
 forwardContent appData =
   do -- liftIO $ print "Expecting BF"
      mPeer <- await
@@ -132,7 +145,8 @@ forwardContent appData =
                       liftIO $ setStatus idx global TP.Done    
                       liftIO $ print $ Seq.index (P.peceHashes peer) idx == SHA1.hash buff
                     
-                      yield peer
+                      yield (show idx, buff)
+                  
                       return ()
                                   
                     (Just next, Nothing) -> do
@@ -152,33 +166,12 @@ forwardContent appData =
                       
                       
                       liftIO $ sendRequest appData (next, 0, size)
-                      yield peer
+                      yield (show idx, buff)
                   
                       
                       forwardContent appData 
 
-printArray :: TP.GlobalPiceInfo -> IO()                      
-printArray global = do 
-  k <- STM.atomically $ MA.getElems global
-  print $ zip k [0..]
-
                                                             
-
-getSize next (nbOfPieces, normalSize, lastSize) =
-  if (next == nbOfPieces -1)
-     then lastSize
-     else normalSize
-  
-  
-setStatusDone :: Int -> TP.GlobalPiceInfo -> IO()
-setStatusDone x global = 
-  STM.atomically $ MA.writeArray global x TP.Done 
-
-
-  
-setStatus :: Int -> TP.GlobalPiceInfo -> TP.PiceInfo -> IO()
-setStatus x global status = 
-  STM.atomically $ MA.writeArray global x status 
   
   
 requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)
@@ -196,33 +189,28 @@ requestNextAndUpdateGlobal pics global =
                 TP.InProgress -> reqNext xs global
                 TP.Done -> reqNext xs global
 
-                    
-                            
-                      
-sinkM :: Sink P.Peer IO ()
-sinkM = awaitForever (\p -> liftIO $ 
-  do  print "sinkM"
-      printArray (P.globalStatus p))
+                                         
+  
+  
+saveToFile :: Sink (String, BC.ByteString) IO ()
+saveToFile = do
+  awaitForever (liftIO . save)
+  where 
+    save :: (String, BC.ByteString) -> IO()
+    save (fN, c) =
+       runResourceT $ 
+        (yield c) 
+        $$ (CB.sinkFile ("downloads/" ++ fN))
+  
+  
+  
    
-   
-generiCSource source lo =
-  do yield lo
-     source
+  
   
   
 -- ((addCleanup (const $ liftIO $ putStrLn "Stopping")) $ source)  
  
  
-logMSG :: Conduit BC.ByteString IO BC.ByteString   
-logMSG = do
---  liftIO $ print "GOT MSG"
-  m <- await
-  case m of
-       Nothing -> return ()
-       Just x -> 
-         do liftIO $ print ("REC " ++ (show (B.length x)))
-            yield x
-            logMSG       
 
 
 tube :: P.Peer -> CN.AppData -> IO ()  
@@ -238,13 +226,12 @@ tube peer appData =
                     Right (lo, h) -> message lo
                     
       let cc = ss
-               =$= logMSG
                =$= decodeMessage (B.empty)-- (flushLeftOver messageAndLeftOver) 
                =$= logParsingError 
                =$= (recMessage peer appData)
                =$= (forwardContent appData) 
           
-      (s1 $=+ cc) $$+- sinkM 
+      (s1 $=+ cc) $$+- saveToFile --sinkM 
         
 
 message :: BC.ByteString -> Conduit BC.ByteString IO BC.ByteString        
@@ -261,21 +248,39 @@ message lo = do
                       
                            
   
-decodeMessage ::B.ByteString ->  Conduit BC.ByteString IO (Perhaps M.Message)
-decodeMessage buff= do
-  xM <- await 
-  case xM of
-       Nothing -> return ()
-       Just x -> do let nB = B.append buff x
-                    case (M.decodeMessage nB ) of     
-                         Left (lo, idx, errorM) ->  decodeMessage nB           -- TODO match on partial parser
-                         Right (lo, idx, m) -> do
-                                                  yield (Right m)
-                                                  decodeMessage B.empty
       
 
    
  
+generiCSource source lo =
+  do yield lo
+     source
+
+     
+ 
+getSize next (nbOfPieces, normalSize, lastSize) =
+  if (next == nbOfPieces -1)
+     then lastSize
+     else normalSize
+  
+  
+setStatusDone :: Int -> TP.GlobalPiceInfo -> IO()
+setStatusDone x global = 
+  STM.atomically $ MA.writeArray global x TP.Done 
+
+
+  
+setStatus :: Int -> TP.GlobalPiceInfo -> TP.PiceInfo -> IO()
+setStatus x global status = 
+  STM.atomically $ MA.writeArray global x status 
+ 
+ 
+ 
+ 
+printArray :: TP.GlobalPiceInfo -> IO()                      
+printArray global = do 
+  k <- STM.atomically $ MA.getElems global
+  print $ zip k [0..]
                       
                       
                       
@@ -284,3 +289,16 @@ sendInterested appData = yield (M.encodeMessage M.Interested) $$ CN.appSink appD
 
 sendRequest :: CN.AppData -> (Int, Int, Int)-> IO() 
 sendRequest appData req = yield (M.encodeMessage $ M.Request req) $$ CN.appSink appData  
+
+
+logMSG :: Conduit BC.ByteString IO BC.ByteString   
+logMSG = do
+--  liftIO $ print "GOT MSG"
+  m <- await
+  case m of
+       Nothing -> return ()
+       Just x -> 
+         do liftIO $ print ("REC " ++ (show (B.length x)))
+            yield x
+            logMSG       
+
