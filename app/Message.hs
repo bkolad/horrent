@@ -103,6 +103,19 @@ getM =  do
 decodeMessage :: B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Message)
 decodeMessage bs = decodeOrFail $ BL.fromStrict bs
   
+  {--
+decodeMessage1 bs = 
+  case getMessage of
+    (Fail _ _ _) -> Left "Failed"
+    Partial fun -> undefined
+    (Done _ _ x) -> Right x--}
+    
+  
+  
+  
+getMessage :: Decoder Message   
+getMessage = runGetIncremental get  
+  
   {--case (runGetIncremental getM) of
                         Fail bs offset m -> Left ("Message Parsing Failed "++ (show m))
                         Partial f ->  Left ("Partial Parsing ")  --f (BL.fromStrict bs)   -- (decodeOrFail $ BL.fromStrict bs)

@@ -21,6 +21,7 @@ import qualified Crypto.Hash.SHA1 as SHA1
 import Control.Monad.Trans.Resource
 import Data.Conduit
 import Data.Maybe
+import Data.Binary.Get
 
 
 type Perhaps a = Either String a          
@@ -48,31 +49,24 @@ recHandshake =
                        Right (leftOver, _, h) ->  Right $ (BL.toStrict leftOver,  h)
      
      
+  
  
  
-decodeMessage ::B.ByteString ->  Conduit BC.ByteString IO (Perhaps M.Message)
-decodeMessage buff= do
-  xM <- await 
-  case xM of
-       Nothing -> return ()
-       Just x -> do let nB = B.append buff x
-                    case (M.decodeMessage nB ) of     
-                         Left (lo, idx, errorM) ->  decodeMessage nB           -- TODO match on partial parser
-                         Right (lo, idx, m) -> do
-                                                  yield (Right m)
-                                                  decodeMessage B.empty
  
- 
-
-logParsingError :: Conduit (Perhaps M.Message) IO M.Message                                
-logParsingError =
-  awaitForever filterFailure
-  where
-    filterFailure =
-      either (liftIO . print . errorMessage) 
-             (yield)
-    errorMessage f = "Parsing Error " ++ (show f)
+decodeMessage :: Decoder M.Message-> Conduit BC.ByteString IO M.Message  
+decodeMessage dec = do
+  case dec of 
+    (Fail _ _ _) -> liftIO $ print "ERROR"
+    
+    Partial fun -> 
+      await >>= maybe (return ()) 
+                      (\x -> decodeMessage $ fun (Just x))   
+    
+    (Done _ _ x) -> yield x  >> (decodeMessage M.getMessage)
+   
       
+  
+  
       
  
 recMessage :: P.Peer -> CN.AppData -> Conduit M.Message IO P.Peer    
@@ -167,30 +161,12 @@ forwardContent appData =
                       
                       liftIO $ sendRequest appData (next, 0, size)
                       yield (show idx, buff)
-                  
-                      
+                                       
                       forwardContent appData 
 
                                                             
   
-  
-requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)
-requestNextAndUpdateGlobal pics global =
-  STM.atomically $ reqNext pics global
-    where
-      reqNext :: [Int] -> TP.GlobalPiceInfo -> STM.STM (Maybe Int)  
-      reqNext [] _ = return Nothing     
-      reqNext (x:xs) global = 
-        do pInfo <- MA.readArray global x
-           case pInfo of
-                TP.NotHave -> 
-                    do MA.writeArray global x TP.InProgress 
-                       return $ Just x
-                TP.InProgress -> reqNext xs global
-                TP.Done -> reqNext xs global
-
-                                         
-  
+ 
   
 saveToFile :: Sink (String, BC.ByteString) IO ()
 saveToFile = do
@@ -226,8 +202,8 @@ tube peer appData =
                     Right (lo, h) -> message lo
                     
       let cc = ss
-               =$= decodeMessage (B.empty)-- (flushLeftOver messageAndLeftOver) 
-               =$= logParsingError 
+               =$= (decodeMessage M.getMessage) --decodeMessage (B.empty)-- (flushLeftOver messageAndLeftOver) 
+          --     =$= logParsingError 
                =$= (recMessage peer appData)
                =$= (forwardContent appData) 
           
@@ -246,7 +222,22 @@ message lo = do
                                         message (B.empty)
                                         
                       
-                           
+
+requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)
+requestNextAndUpdateGlobal pics global =
+  STM.atomically $ reqNext pics global
+    where
+      reqNext :: [Int] -> TP.GlobalPiceInfo -> STM.STM (Maybe Int)  
+      reqNext [] _ = return Nothing     
+      reqNext (x:xs) global = 
+        do pInfo <- MA.readArray global x
+           case pInfo of
+                TP.NotHave -> 
+                    do MA.writeArray global x TP.InProgress 
+                       return $ Just x
+                TP.InProgress -> reqNext xs global
+                TP.Done -> reqNext xs global
+                      
   
       
 
