@@ -106,8 +106,7 @@ recMessage peer appData = do
       
    
 forwardContent :: CN.AppData -> Conduit P.Peer IO (String, BC.ByteString)--P.Peer  -- Last/NotLast (Idx, offset buff)         
-forwardContent appData =
-  do -- liftIO $ print "Expecting BF"
+forwardContent appData = do 
      mPeer <- await
      case mPeer of 
           Nothing -> return ()
@@ -117,8 +116,8 @@ forwardContent appData =
                    global = P.globalStatus peer
                    peerPieces = P.pieces peer
                    infoSize = P.sizeInfo peer
-               next <- liftIO $ requestNextAndUpdateGlobal peerPieces global 
-               case (next, pB) of
+               nextM <- liftIO $ requestNextAndUpdateGlobal peerPieces global 
+               case (nextM, pB) of
                     (Nothing, Nothing) -> do
                       liftIO $ print "EXIT"
                       return () 
@@ -166,51 +165,49 @@ saveToFile = do
        runResourceT $ 
         (yield c) 
         $$ (CB.sinkFile ("downloads/" ++ fN))
+        
   
   
+flushLeftOver :: BC.ByteString -> Conduit BC.ByteString IO BC.ByteString
+flushLeftOver lo 
+  | (not . B.null) lo = do
+      yield lo
+      awaitForever yield
+      
+  | otherwise         = awaitForever yield
   
-   
   
-  
-  
--- ((addCleanup (const $ liftIO $ putStrLn "Stopping")) $ source)  
- 
- 
-
+                                        
+-- let source = (addCleanup (const $ liftIO $ putStrLn "Stopping ---")) $ CN.appSource (appData)
+    
 
 tube :: P.Peer -> CN.AppData -> IO ()  
-tube peer appData = 
-   do liftIO $ print "ENTER"
-      sendHandshake (P.infoHash peer) appData
-      let source = (addCleanup (const $ liftIO $ putStrLn "Stopping ---")) $ CN.appSource (appData)
-                 
-      (s1, res) <- source $$+ recHandshake
+tube peer appData = do  
+  let infoHash = P.infoHash peer
+  sendHandshake infoHash appData
+  
+  let source = CN.appSource appData             
+  (nextSource, handshake) <- source $$+ recHandshake
+  
+  case handshake of
+    Left l -> 
+      print l
+    Right (bitFieldLeftOver, hand) -> 
+      nextSource 
+    
+      $=+  flushLeftOver bitFieldLeftOver 
       
-      let ss = case res of
-                    Left l -> message (B.empty)
-                    Right (lo, h) -> message lo
-                    
-      let cc = ss
-               =$= (decodeMessage M.getMessage) --decodeMessage (B.empty)-- (flushLeftOver messageAndLeftOver) 
-               =$= (recMessage peer appData)
-               =$= (forwardContent appData) 
-          
-      (s1 $=+ cc) $$+- saveToFile --sinkM 
-        
-
-message :: BC.ByteString -> Conduit BC.ByteString IO BC.ByteString        
-message lo = do
-           if ((not . B.null) lo)
-              then do yield lo    
-                      message (B.empty)
-              else do k <- await
-                      case k of
-                           Nothing -> return ()
-                           Just b -> do yield b
-                                        message (B.empty)
-                                        
+      =$=  decodeMessage M.getMessage
+      
+      =$=  recMessage peer appData
+      
+      =$=  forwardContent appData
+      
+      $$+- saveToFile  
+     
+   
+    
                       
-
 requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)
 requestNextAndUpdateGlobal pics global =
   STM.atomically $ reqNext pics global
@@ -231,17 +228,11 @@ requestNextAndUpdateGlobal pics global =
 
    
  
-generiCSource source lo =
-  do yield lo
-     source
-
-     
- 
-getSize next (nbOfPieces, normalSize, lastSize) =
-  if (next == nbOfPieces -1)
-     then lastSize
-     else normalSize
+getSize next (nbOfPieces, normalSize, lastSize) 
+  | (next == nbOfPieces -1) = lastSize
+  | otherwise               = normalSize 
   
+
   
 setStatusDone :: Int -> TP.GlobalPiceInfo -> IO()
 setStatusDone x global = 
@@ -264,10 +255,16 @@ printArray global = do
                       
                       
 sendInterested :: CN.AppData -> IO() 
-sendInterested appData = yield (M.encodeMessage M.Interested) $$ CN.appSink appData  
+sendInterested appData = 
+  yield (M.encodeMessage M.Interested) 
+  $$ CN.appSink appData  
 
-sendRequest :: CN.AppData -> (Int, Int, Int)-> IO() 
-sendRequest appData req = yield (M.encodeMessage $ M.Request req) $$ CN.appSink appData  
+  
+  
+sendRequest :: CN.AppData -> (Int, Int, Int) -> IO() 
+sendRequest appData req = 
+  yield (M.encodeMessage $ M.Request req) 
+  $$ CN.appSink appData  
 
 
 logMSG :: Conduit BC.ByteString IO BC.ByteString   
