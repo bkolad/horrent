@@ -21,58 +21,47 @@ import qualified Crypto.Hash.SHA1 as SHA1
 import Control.Monad.Trans.Resource
 import Data.Conduit
 import Data.Maybe
-import Data.Binary.Get
+import qualified Data.Binary.Get as G
 
 
-type Perhaps a = Either String a          
   
 
 sendHandshake :: B.ByteString ->  CN.AppData -> IO ()  
 sendHandshake infoHash appData = 
    yield handshake $$ CN.appSink appData 
    where      
-      handshake = H.createHandshake infoHash
+     handshake = H.createHandshake infoHash
       
       
-recHandshake :: Sink BC.ByteString IO (Perhaps (BC.ByteString, H.Handshake)) -- <-- replace IO by Either
+      
+recHandshake :: Sink BC.ByteString IO (TP.Perhaps (BC.ByteString, H.Handshake)) 
 recHandshake = 
-   do handM <- await
-      liftIO $ print $ "GOTHS LL  " ++ (show(length handM))
-      case handM of
-           Nothing -> return $ Left "No handshake"    
-           Just hand -> return $ convertHandshake hand
-          where 
-            convertHandshake = convertParsedOutput . H.decodeHandshake 
-            convertParsedOutput x = 
-               do case x of
-                       Left (_, _, e) -> Left $ "Problem with parsing handshake " ++ (show e)
-                       Right (leftOver, _, h) ->  Right $ (BL.toStrict leftOver,  h)
-     
-     
-  
+  await >>= maybe (return $ Left "No handshake") 
+                  (return . convertHandshake)
+  where 
+    convertHandshake = H.convertParsedOutput . H.decodeHandshake 
+           
+             
  
- 
- 
-decodeMessage :: Decoder M.Message-> Conduit BC.ByteString IO M.Message  
+decodeMessage :: G.Decoder M.Message -> Conduit BC.ByteString IO M.Message  
 decodeMessage dec = do
   case dec of 
-    (Fail _ _ _) -> liftIO $ print "ERROR"
-    
-    Partial fun -> 
+    (G.Fail _ _ _) -> 
+      liftIO $ print "ERROR: DECODING FAILURE"   
+      
+    G.Partial fun -> 
       await >>= maybe (return ()) 
                       (\x -> decodeMessage $ fun (Just x))   
     
-    (Done _ _ x) -> yield x  >> (decodeMessage M.getMessage)
+    (G.Done _ _ x) -> 
+      yield x  >> (decodeMessage M.getMessage)
    
       
-  
-  
       
  
 recMessage :: P.Peer -> CN.AppData -> Conduit M.Message IO P.Peer    
 recMessage peer appData = do
-  message <- await
- 
+  message <- await 
   case message of
        Nothing -> do liftIO $ print "NOTHING NO MESSAGE"
                      return ()
@@ -203,7 +192,6 @@ tube peer appData =
                     
       let cc = ss
                =$= (decodeMessage M.getMessage) --decodeMessage (B.empty)-- (flushLeftOver messageAndLeftOver) 
-          --     =$= logParsingError 
                =$= (recMessage peer appData)
                =$= (forwardContent appData) 
           

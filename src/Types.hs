@@ -9,6 +9,7 @@ module Types  ( GlobalPiceInfo
               , NumberOfPieces
               , NormalPieceSize
               , LastPieceSize
+              , Perhaps
               ) where
 
 
@@ -25,6 +26,8 @@ import Control.Monad.IO.Class (liftIO)
 type NumberOfPieces = Int
 type NormalPieceSize = Int
 type LastPieceSize = Int
+
+type Perhaps a = Either String a 
 
 
 data PiceInfo = Done | InProgress | NotHave 

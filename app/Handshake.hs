@@ -5,6 +5,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import qualified Peer as P
+import qualified Types as TP
 import Data.Binary
 import Data.Binary.Get
 import Data.Binary.Put
@@ -47,6 +48,19 @@ createHandshake hash = BL.toStrict . encode $ Handshake len protocol rsrv hash m
 
            
 
-decodeHandshake :: B.ByteString -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Handshake) 
+decodeHandshake :: 
+  B.ByteString 
+  -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Handshake) 
 decodeHandshake bs =  decodeOrFail $ BL.fromStrict bs
+
+convertParsedOutput :: 
+  Either (BL.ByteString , ByteOffset, String) (BL.ByteString, ByteOffset, Handshake) 
+  -> TP.Perhaps (BC.ByteString, Handshake)
+convertParsedOutput x = do 
+  case x of
+    Left (_, _, e) -> Left $ "Problem with parsing handshake " ++ (show e)
+    Right (leftOver, _, h) ->  Right $ (BL.toStrict leftOver,  h)
+  
+
+
                                                                   
