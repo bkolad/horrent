@@ -34,13 +34,13 @@ logMsg a = liftIO $ print a
                                                                                 
 makePeers :: String -> ExceptT String IO [P.Peer]
 makePeers tracker = 
-  do torrentContent <-  BP.parseFromFile tracker
+  do torrentContent              <-  BP.parseFromFile tracker
      info@(numberOfPieces, _, _) <- liftEither $ getSizeInfo torrentContent   
      liftIO $ print (show info)
-     globalStatus    <- liftIO $ newGlobalBitField numberOfPieces     
-     ipsAndPorts <- peersIpAndPortsFromTracker torrentContent           
-     infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
-     pHashes <- liftEither $ BP.piecesHashSeq torrentContent
+     globalStatus                <- liftIO $ newGlobalBitField numberOfPieces     
+     ipsAndPorts                 <- peersIpAndPortsFromTracker torrentContent           
+     infoHash                    <- liftEither $ BC.pack <$> BP.infoHash torrentContent
+     pHashes                     <- liftEither $ BP.piecesHashSeq torrentContent
      let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus False Nothing pHashes info) ipsAndPorts
      return peers 
     

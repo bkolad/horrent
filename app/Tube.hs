@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, ViewPatterns #-}
 module Tube where
 
 import Data.Conduit
@@ -30,31 +30,33 @@ sendHandshake :: B.ByteString ->  CN.AppData -> IO ()
 sendHandshake infoHash appData = 
    yield handshake $$ CN.appSink appData 
    where      
-     handshake = H.createHandshake infoHash
+      handshake = H.createHandshake infoHash
       
       
       
 recHandshake :: Sink BC.ByteString IO (TP.Perhaps (BC.ByteString, H.Handshake)) 
 recHandshake = 
-  await >>= maybe (return $ Left "No handshake") 
-                  (return . convertHandshake)
-  where 
-    convertHandshake = H.convertParsedOutput . H.decodeHandshake 
+   await >>= maybe (return $ Left "No handshake") 
+                   (return . convertHandshake)                  
+   where 
+      convertHandshake = H.convertParsedOutput . H.decodeHandshake 
            
              
  
 decodeMessage :: G.Decoder M.Message -> Conduit BC.ByteString IO M.Message  
 decodeMessage dec = do
-  case dec of 
-    (G.Fail _ _ _) -> 
-      liftIO $ print "ERROR: DECODING FAILURE"   
+   case dec of 
+      (G.Fail _ _ _) -> 
+         liftIO $ print "ERROR: DECODING FAILURE"   
       
-    G.Partial fun -> 
-      await >>= maybe (return ()) 
-                      (\x -> decodeMessage $ fun (Just x))   
+      G.Partial fun -> 
+         await >>= maybe (return ()) 
+                         (\x -> decodeMessage $ fun (Just x))   
     
-    (G.Done _ _ x) -> 
-      yield x  >> (decodeMessage M.getMessage)
+      (G.Done lo _ x) -> do
+         yield x
+         leftover lo
+         (decodeMessage M.getMessage)
    
       
       
@@ -87,7 +89,7 @@ recMessage peer appData = do
             recMessage newPeer appData
       
        Just (M.Piece p@(idx,offset,content)) ->
-         do liftIO $  print "Piece"
+         do --liftIO $  print "Piece"
             let newPeer = peer {P.buffer = Just p}
             yield newPeer
             recMessage newPeer appData 
@@ -139,7 +141,7 @@ forwardContent appData = do
                       forwardContent appData
                              
                     (Just next, Just (idx, offset, buff)) -> do      
-                      liftIO $ print "GOT"
+                   --   liftIO $ print "GOT"
                       let size = getSize next infoSize
                       liftIO $ print ( (show idx) ++" arrived "++(show(B.length buff)))
                       liftIO $ print $ Seq.index (P.peceHashes peer) idx == SHA1.hash buff
@@ -167,70 +169,68 @@ saveToFile = do
         $$ (CB.sinkFile ("downloads/" ++ fN))
         
   
-  
+
 flushLeftOver :: BC.ByteString -> Conduit BC.ByteString IO BC.ByteString
 flushLeftOver lo 
-  | (not . B.null) lo = do
-      yield lo
-      awaitForever yield
-      
-  | otherwise         = awaitForever yield
+   | (not . B.null) lo = do
+        yield lo
+        awaitForever yield     
+   | otherwise         = awaitForever yield
   
   
-                                        
+                                       
 -- let source = (addCleanup (const $ liftIO $ putStrLn "Stopping ---")) $ CN.appSource (appData)
     
 
 tube :: P.Peer -> CN.AppData -> IO ()  
 tube peer appData = do  
-  let infoHash = P.infoHash peer
-  sendHandshake infoHash appData
+   let infoHash = P.infoHash peer
+   sendHandshake infoHash appData
   
-  let source = CN.appSource appData             
-  (nextSource, handshake) <- source $$+ recHandshake
+   let source = CN.appSource appData             
+   (nextSource, handshake) <- source $$+ recHandshake
   
-  case handshake of
-    Left l -> 
-      print l
-    Right (bitFieldLeftOver, hand) -> 
-      nextSource 
+   case handshake of
+      Left l -> 
+         print l
+      Right (bitFieldLeftOver, hand) -> 
+         nextSource 
     
-      $=+  flushLeftOver bitFieldLeftOver 
+         $=+  flushLeftOver bitFieldLeftOver 
       
-      =$=  decodeMessage M.getMessage
+         =$=  decodeMessage M.getMessage
       
-      =$=  recMessage peer appData
+         =$=  recMessage peer appData
       
-      =$=  forwardContent appData
+         =$=  forwardContent appData
       
-      $$+- saveToFile  
+         $$+- saveToFile  
      
    
     
                       
 requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)
 requestNextAndUpdateGlobal pics global =
-  STM.atomically $ reqNext pics global
-    where
-      reqNext :: [Int] -> TP.GlobalPiceInfo -> STM.STM (Maybe Int)  
-      reqNext [] _ = return Nothing     
-      reqNext (x:xs) global = 
-        do pInfo <- MA.readArray global x
-           case pInfo of
-                TP.NotHave -> 
-                    do MA.writeArray global x TP.InProgress 
-                       return $ Just x
-                TP.InProgress -> reqNext xs global
-                TP.Done -> reqNext xs global
+   STM.atomically $ reqNext pics global
+      where
+         reqNext :: [Int] -> TP.GlobalPiceInfo -> STM.STM (Maybe Int)  
+         reqNext [] _ = return Nothing     
+         reqNext (x:xs) global = 
+            do pInfo <- MA.readArray global x -- TODO view pattern
+               case pInfo of
+                  TP.NotHave -> do 
+                     MA.writeArray global x TP.InProgress 
+                     return $ Just x
+                  TP.InProgress -> reqNext xs global
+                  TP.Done -> reqNext xs global
                       
-  
-      
 
+                      
    
  
 getSize next (nbOfPieces, normalSize, lastSize) 
-  | (next == nbOfPieces -1) = lastSize
-  | otherwise               = normalSize 
+   | (next == nbOfPieces -1) = lastSize
+   | otherwise               = normalSize 
   
 
   
