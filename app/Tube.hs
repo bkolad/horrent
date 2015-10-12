@@ -24,7 +24,7 @@ import Data.Maybe
 import qualified Data.Binary.Get as G
 
           --65536
-chunkSize = 16384  
+chunkSize = 8192--16384  
 
 sendHandshake :: B.ByteString ->  CN.AppData -> IO ()  
 sendHandshake infoHash appData = 
@@ -106,7 +106,70 @@ recMessage peer appData = do
           --  return ()
       
       
-   
+
+forwardContent2 :: 
+   CN.AppData 
+   ->  BC.ByteString
+   -> (Int, Int, Int)
+   -> [Int]
+   -> TP.GlobalPiceInfo
+   -> Conduit (Maybe (Int, Int, BC.ByteString)) IO (String, BC.ByteString)
+forwardContent2 appData dataBuffer infoSize peerPieces global =
+   await >>= maybe (return ()) 
+                   (go)
+   where
+      go Nothing = do
+         nextM <- liftIO $ requestNextAndUpdateGlobal peerPieces global 
+         case nextM of
+            Nothing -> 
+               return ()
+            Just next -> do 
+               liftIO $ sendRequest appData (next, 0, chunkSize)
+               liftIO $ setStatus next global TP.InProgress
+               forwardContent2 appData dataBuffer infoSize peerPieces global
+                
+              
+      go (Just (idx, offset, peerBuffer)) 
+        | offset < size - chunkSize  = do
+             liftIO $ sendRequest appData (idx, offset + chunkSize , chunkSize)
+             let newBuffer = dataBuffer `BC.append` peerBuffer     
+             forwardContent2 appData newBuffer infoSize peerPieces global
+    
+        
+        | otherwise                  = do
+             nextM <- liftIO $ requestNextAndUpdateGlobal peerPieces global 
+             case nextM of
+                Nothing -> 
+                   return()                  
+                Just next -> do 
+                   liftIO $ setStatus idx global TP.Done 
+                 
+                   liftIO $ sendRequest appData (next, 0 , reqSize next)
+                          
+                   let newBuffer = dataBuffer `BC.append` peerBuffer     
+                   yield (show idx, newBuffer)
+                   forwardContent2 appData BC.empty infoSize peerPieces global
+    
+                                  
+                                 
+        where
+          size = getSize idx infoSize
+          nextM = requestNextAndUpdateGlobal peerPieces global 
+          lastS (nbOfPieces, normalSize, lastSize) = lastSize 
+          reqSize next 
+            | (last peerPieces == next) = min (lastS infoSize) chunkSize
+            | otherwise                 = chunkSize      
+               
+                   
+getSize next (nbOfPieces, normalSize, lastSize) 
+   | (next == nbOfPieces -1) = lastSize
+   | otherwise               = normalSize 
+  
+      
+      
+      
+      
+      
 forwardContent :: CN.AppData -> BC.ByteString -> Conduit P.Peer IO (String, BC.ByteString)--P.Peer  -- Last/NotLast (Idx, offset buff)         
 forwardContent appData dataBuffer = do 
      mPeer <- await
@@ -242,10 +305,6 @@ requestNextAndUpdateGlobal pics global =
                       
    
  
-getSize next (nbOfPieces, normalSize, lastSize) 
-   | (next == nbOfPieces -1) = lastSize
-   | otherwise               = normalSize 
-  
 
   
 setStatusDone :: Int -> TP.GlobalPiceInfo -> IO()
