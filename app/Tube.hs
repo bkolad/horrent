@@ -131,6 +131,7 @@ forwardContent2 appData dataBuffer infoSize  global =
               
       go (peerPieces, Just (idx, offset, peerBuffer)) 
         | offset < size - chunkSize  = do
+             liftIO $ print ( (show idx) ++" "++(show offset) ++ " "++" arrived "++(show(B.length peerBuffer)))       
              liftIO $ sendRequest appData (idx, offset + chunkSize , chunkSize)
              let newBuffer = dataBuffer `BC.append` peerBuffer     
              forwardContent2 appData newBuffer infoSize global
