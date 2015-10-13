@@ -2,6 +2,8 @@
 module Tube where
 
 import Data.Conduit
+import qualified Data.Conduit.List as CL
+
 import qualified Message as M
 import Control.Monad.IO.Class
 import qualified Handshake as H
@@ -19,7 +21,6 @@ import qualified Data.Array.MArray as MA
 import qualified Control.Concurrent.STM as STM
 import qualified Crypto.Hash.SHA1 as SHA1 
 import Control.Monad.Trans.Resource
-import Data.Conduit
 import Data.Maybe
 import qualified Data.Binary.Get as G
 
@@ -111,14 +112,13 @@ forwardContent2 ::
    CN.AppData 
    ->  BC.ByteString
    -> (Int, Int, Int)
-   -> [Int]
    -> TP.GlobalPiceInfo
-   -> Conduit (Maybe (Int, Int, BC.ByteString)) IO (String, BC.ByteString)
-forwardContent2 appData dataBuffer infoSize peerPieces global =
+   -> Conduit ([Int], Maybe (Int, Int, BC.ByteString)) IO (String, BC.ByteString)
+forwardContent2 appData dataBuffer infoSize  global =
    await >>= maybe (return ()) 
                    (go)
    where
-      go Nothing = do
+      go (peerPieces, Nothing) = do
          nextM <- liftIO $ requestNextAndUpdateGlobal peerPieces global 
          case nextM of
             Nothing -> 
@@ -126,14 +126,14 @@ forwardContent2 appData dataBuffer infoSize peerPieces global =
             Just next -> do 
                liftIO $ sendRequest appData (next, 0, chunkSize)
                liftIO $ setStatus next global TP.InProgress
-               forwardContent2 appData dataBuffer infoSize peerPieces global
+               forwardContent2 appData dataBuffer infoSize global
                 
               
-      go (Just (idx, offset, peerBuffer)) 
+      go (peerPieces, Just (idx, offset, peerBuffer)) 
         | offset < size - chunkSize  = do
              liftIO $ sendRequest appData (idx, offset + chunkSize , chunkSize)
              let newBuffer = dataBuffer `BC.append` peerBuffer     
-             forwardContent2 appData newBuffer infoSize peerPieces global
+             forwardContent2 appData newBuffer infoSize global
     
         
         | otherwise                  = do
@@ -148,7 +148,7 @@ forwardContent2 appData dataBuffer infoSize peerPieces global =
                           
                    let newBuffer = dataBuffer `BC.append` peerBuffer     
                    yield (show idx, newBuffer)
-                   forwardContent2 appData BC.empty infoSize peerPieces global
+                   forwardContent2 appData BC.empty infoSize global
     
                                   
                                  
@@ -351,3 +351,20 @@ logMSG = do
             yield x
             logMSG       
 
+
+            
+            
+            
+main :: IO ()
+main = do
+    let src = mapM_ yield [1..3 :: Int]
+        src2 = mapM_ yield [8..10 :: Int]
+        src3 = getZipConduit $ ZipConduit src <* ZipConduit src2
+        conduit1 = CL.map (+1)
+     --   conduit2 = CL.concatMap (replicate 2)
+     --   conduit = getZipConduit $ ZipConduit conduit1 <* ZipConduit conduit2
+        sink = CL.mapM_ print
+        sink1 = CL.mapM_ (\x -> print ("lala "++(show x)))
+        sink3 = getZipConduit $ ZipConduit sink <* ZipConduit sink1
+    src3 $$ conduit1 =$ sink3            
+            
