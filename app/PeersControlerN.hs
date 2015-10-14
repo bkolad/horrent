@@ -25,7 +25,7 @@ import qualified Types as TP
 
 
 main::IO() 
-main = do result <- runExceptT $ start  "tom.torrent"-- "tom.torrent"--"ubuntu.torrent"  -- "tom.torrent"--
+main = do result <- runExceptT $ start  "ubuntu.torrent" -- "tom.torrent"--"ubuntu.torrent"  -- "tom.torrent"--
           print result
 
           

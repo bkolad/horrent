@@ -12,7 +12,7 @@ data Peer = Peer { hostName :: N.HostName
                  , infoHash :: B.ByteString
                  , globalStatus :: TP.GlobalPiceInfo
                  , unChoked :: Bool
-                 , buffer :: Maybe (Int, Int, B.ByteString)
+                 , buffer :: B.ByteString 
                  , peceHashes :: TP.Buffer
                  , sizeInfo :: (TP.NumberOfPieces, TP.NormalPieceSize, TP.LastPieceSize)
                  }

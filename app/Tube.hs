@@ -62,113 +62,135 @@ decodeMessage dec = do
       
       
  
-recMessage :: [Int] -> CN.AppData -> Conduit M.Message IO ([Int], Maybe  (Int, Int, B.ByteString))    
-recMessage peers appData = do
-  message <- await 
-  case message of
-       Nothing -> do liftIO $ print "NOTHING NO MESSAGE"
-                     return ()
-      
-       Just (M.Bitfield b) ->
-         do liftIO $ print "BF"
-            let pList = P.convertToBits b 
-            liftIO $ sendInterested appData
-            recMessage pList appData
-              
-       Just (M.Have b) -> 
-         do liftIO $ print "Have"  
-            let pList = (P.fromBsToInt b) : peers
-            recMessage pList appData
-                                                                          -- TODO use phantom types for peer validation
-       Just M.UnChoke -> 
-         do 
-            liftIO $  print "UnChoke"
-            yield (peers, Nothing)
-            recMessage peers appData
-      
-       Just (M.Piece p@(idx,offset,content)) ->
-         do liftIO $  print "Piece"
-            yield (peers, Just p)
-            recMessage peers appData 
-  
-       Just M.Choke -> return ()
-      
-       Just M.KeepAlive -> 
-         do liftIO $ print "KeepAlive" 
-            recMessage peers appData
-      
-       Just y -> 
-         do liftIO $ 
-              print ("This message should not arrive while downloading " ++ (show y))     
-          --  return ()
-      
-      
-
-forwardContent2 :: 
+recMessage ::  
    CN.AppData 
-   ->  BC.ByteString
-   -> (Int, Int, Int)
-   -> TP.Buffer
-   -> TP.GlobalPiceInfo
-   -> Conduit ([Int], Maybe (Int, Int, BC.ByteString)) IO (String, BC.ByteString)
-forwardContent2 appData dataBuffer infoSize pieceHash global =
-   await >>= maybe (return ()) 
-                   (go)
-   where
-      go (peerPieces, Nothing) = do
-         nextM <- liftIO $ requestNextAndUpdateGlobal peerPieces global 
-         case nextM of
-            Nothing -> 
-               return ()
-            Just next -> do 
-               liftIO $ print ("Req "++(show next))
-               liftIO $ sendRequest appData (next, 0, chunkSize)
-               liftIO $ setStatus next global TP.InProgress
-               forwardContent2 appData dataBuffer infoSize pieceHash global
-                
+   -> P.Peer 
+   -> Conduit M.Message IO (String, BC.ByteString)
+recMessage appData peer = do
+  message <- await 
+  
+  let pieces = P.pieces peer
+      global = P.globalStatus peer
+            
+  case message of
+       Nothing -> do 
+            return ()
+         
+      
+       Just (M.Bitfield b) -> do 
+            liftIO $ print "BF"
+            let pList = P.convertToBits b 
+                newPeer = peer {P.pieces = pList}
+            liftIO $ sendInterested appData
+            recMessage appData newPeer 
               
-      go (peerPieces, Just (idx, offset, peerBuffer)) 
-        | offset < size - chunkSize  = do
-             liftIO $ print ( (show idx) ++" "++(show offset) ++ " "++" arrived "++(show(B.length peerBuffer)))       
-             liftIO $ sendRequest appData (idx, offset + chunkSize , chunkSize)
-             let newBuffer = dataBuffer `BC.append` peerBuffer     
-             forwardContent2 appData newBuffer infoSize pieceHash global
-    
-        
-        | otherwise                  = do
-             nextM <- liftIO $ requestNextAndUpdateGlobal peerPieces global 
-             case nextM of
-                Nothing -> 
-                   return()                  
-                Just next -> do   
-                   liftIO $ setStatus idx global TP.Done 
-                 
-                   liftIO $ sendRequest appData (next, 0 , reqSize next)
-                          
-                   let newBuffer = dataBuffer `BC.append` peerBuffer    
-                   liftIO $ print $ Seq.index pieceHash idx == SHA1.hash newBuffer
-                     
-                   yield (show idx, newBuffer)
-                   liftIO $ print ("Next " ++ (show next))
-                           
-                   forwardContent2 appData BC.empty infoSize pieceHash global
-    
-                                  
-                                 
-        where
-          size = getSize idx infoSize
-          nextM = requestNextAndUpdateGlobal peerPieces global 
-          lastS (nbOfPieces, normalSize, lastSize) = lastSize 
-          reqSize next 
-            | (last peerPieces == next) = min (lastS infoSize) chunkSize
-            | otherwise                 = chunkSize      
-               
+           
+           
+       Just (M.Have b) -> do 
+            liftIO $ print "Have"  
+            let pList = (P.fromBsToInt b) : P.pieces peer
+                newPeer = peer {P.pieces = pList}  
+            recMessage appData newPeer 
+            
+            
+                                         
+       Just M.UnChoke -> do 
+            liftIO $  print "UnChoke"
+            nextM <- liftIO $ requestNextAndUpdateGlobal pieces global 
+            case nextM of
+                 Nothing -> 
+                      return ()                    
+                 Just next -> do          
+                      liftIO $ print ("Req "++(show next))
+                      liftIO $ sendRequest appData (next, 0, chunkSize)
+                      liftIO $ setStatus next global  TP.InProgress
+            
+                      recMessage appData peer 
+                        
+      
+         
+       Just (M.Piece (idx, offset, chunkBuffer)) -> do     
+            let newBuffer = (P.buffer peer) `BC.append` chunkBuffer
+                newPeer = peer {P.buffer = newBuffer}  
+                size = getSize idx (P.sizeInfo peer)           
+            handlePiecie appData (idx,offset) size newPeer  
+     
+     
+      
+       Just M.Choke -> 
+            return ()
+      
+       Just M.KeepAlive -> do 
+            liftIO $ print "KeepAlive" 
+            recMessage appData peer 
+                       
+      
+       Just y -> do 
+            liftIO $ print ("This message should not arrive while downloading " ++ (show y))     
+            return ()
                    
+      
+      
+      
+          
+handlePiecie :: 
+   CN.AppData
+   ->(Int, Int)
+   -> Int
+   -> P.Peer
+   -> ConduitM M.Message (String, BC.ByteString) IO ()               
+handlePiecie appData (idx, offset) size peer  
+  | (offset < size - chunkSize) = do
+       liftIO $ print ((show idx) ++ " " ++ (show offset))    
+       liftIO $ sendRequest appData (idx, offset + chunkSize , chunkSize)
+      
+       recMessage appData peer 
+       
+       
+ | otherwise = do     
+      let pieces = P.pieces peer
+          global = P.globalStatus peer
+  
+      nextM <- liftIO $ requestNextAndUpdateGlobal pieces global                 
+      case nextM of
+            Nothing -> 
+                 return ()
+            Just next -> do    
+                
+                 liftIO $ setStatus idx (P.globalStatus peer)  TP.Done 
+                 liftIO $ sendRequest appData (next, 0 , reqSize next)
+                 liftIO $ print ("Next " ++ (show next))      
+                 let newBuffer = P.buffer peer
+                     hshEq = ((Seq.index (P.peceHashes peer) idx) == SHA1.hash newBuffer)
+                 liftIO $ print hshEq
+         
+                 yield (show idx, newBuffer)
+              
+                 let newPeer = peer {P.buffer = BC.empty}
+                 recMessage appData newPeer  
+                
+      where         
+         reqSize next 
+            | (last (P.pieces peer) == next) =
+                 min (lastS (P.sizeInfo peer)) chunkSize
+                 
+            | otherwise = 
+                 chunkSize      
+                 
+         lastS (nbOfPieces, normalSize, lastSize) = lastSize 
+        
+     
+       
+  
+  
 getSize next (nbOfPieces, normalSize, lastSize) 
    | (next == nbOfPieces -1) = lastSize
    | otherwise               = normalSize 
   
                                                                   
+  
+  
+  
   
  
   
@@ -189,6 +211,7 @@ flushLeftOver lo
    | (not . B.null) lo = do
         yield lo
         awaitForever yield     
+        
    | otherwise         = awaitForever yield
   
   
@@ -219,9 +242,7 @@ tube peer appData = do
       
          =$=  decodeMessage M.getMessage
       
-         =$=  recMessage [] appData
-      
-         =$=  (forwardContent2 appData BC.empty infoSize peceHashes global)        --forwardContent appData BC.empty
+         =$=  recMessage appData peer 
       
          $$+- saveToFile  
      

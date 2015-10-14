@@ -41,7 +41,7 @@ makePeers tracker =
      ipsAndPorts                 <- peersIpAndPortsFromTracker torrentContent           
      infoHash                    <- liftEither $ BC.pack <$> BP.infoHash torrentContent
      pHashes                     <- liftEither $ BP.piecesHashSeq torrentContent
-     let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus False Nothing pHashes info) ipsAndPorts
+     let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus False BC.empty pHashes info) ipsAndPorts
      return peers 
     
     
