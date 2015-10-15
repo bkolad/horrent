@@ -27,9 +27,9 @@ import qualified Data.Binary.Get as G
           --8192
 chunkSize = 16384  
 
-sendHandshake :: B.ByteString ->  CN.AppData -> IO ()  
-sendHandshake infoHash appData = 
-   yield handshake $$ CN.appSink appData 
+sendHandshake :: B.ByteString -> Sink BC.ByteString IO () -> IO ()  
+sendHandshake infoHash peerSink = 
+   yield handshake $$ peerSink
    where      
       handshake = H.createHandshake infoHash
       
@@ -63,10 +63,10 @@ decodeMessage dec = do
       
  
 recMessage ::  
-   CN.AppData 
+   Sink BC.ByteString IO () 
    -> P.Peer 
    -> Conduit M.Message IO (String, BC.ByteString)
-recMessage appData peer = do
+recMessage peerSink peer = do
   message <- await 
   
   let pieces = P.pieces peer
@@ -81,8 +81,8 @@ recMessage appData peer = do
             liftIO $ print "BF"
             let pList = P.convertToBits b 
                 newPeer = peer {P.pieces = pList}
-            liftIO $ sendInterested appData
-            recMessage appData newPeer 
+            liftIO $ sendInterested peerSink
+            recMessage peerSink newPeer 
               
            
            
@@ -90,7 +90,7 @@ recMessage appData peer = do
             liftIO $ print "Have"  
             let pList = (P.fromBsToInt b) : P.pieces peer
                 newPeer = peer {P.pieces = pList}  
-            recMessage appData newPeer 
+            recMessage peerSink newPeer 
             
             
                                          
@@ -102,10 +102,10 @@ recMessage appData peer = do
                       return ()                    
                  Just next -> do          
                       liftIO $ print ("Req "++(show next))
-                      liftIO $ sendRequest appData (next, 0, chunkSize)
+                      liftIO $ sendRequest peerSink (next, 0, chunkSize)
                       liftIO $ setStatus next global  TP.InProgress
             
-                      recMessage appData peer 
+                      recMessage peerSink peer 
                         
       
          
@@ -113,7 +113,7 @@ recMessage appData peer = do
             let newBuffer = (P.buffer peer) `BC.append` chunkBuffer
                 newPeer = peer {P.buffer = newBuffer}  
                 size = getSize idx (P.sizeInfo peer)           
-            handlePiecie appData (idx,offset) size newPeer  
+            handlePiecie peerSink (idx,offset) size newPeer  
      
      
       
@@ -122,7 +122,7 @@ recMessage appData peer = do
       
        Just M.KeepAlive -> do 
             liftIO $ print "KeepAlive" 
-            recMessage appData peer 
+            recMessage peerSink peer 
                        
       
        Just y -> do 
@@ -134,17 +134,17 @@ recMessage appData peer = do
       
           
 handlePiecie :: 
-   CN.AppData
+   Sink BC.ByteString IO ()
    ->(Int, Int)
    -> Int
    -> P.Peer
    -> ConduitM M.Message (String, BC.ByteString) IO ()               
-handlePiecie appData (idx, offset) size peer  
+handlePiecie peerSink (idx, offset) size peer  
   | (offset < size - chunkSize) = do
        liftIO $ print ((show idx) ++ " " ++ (show offset))    
-       liftIO $ sendRequest appData (idx, offset + chunkSize , chunkSize)
+       liftIO $ sendRequest peerSink (idx, offset + chunkSize , chunkSize)
       
-       recMessage appData peer 
+       recMessage peerSink peer 
        
        
  | otherwise = do     
@@ -158,7 +158,7 @@ handlePiecie appData (idx, offset) size peer
             Just next -> do    
                 
                  liftIO $ setStatus idx (P.globalStatus peer)  TP.Done 
-                 liftIO $ sendRequest appData (next, 0 , reqSize next)
+                 liftIO $ sendRequest peerSink (next, 0 , reqSize next)
                  liftIO $ print ("Next " ++ (show next))      
                  let newBuffer = P.buffer peer
                      hshEq = ((Seq.index (P.peceHashes peer) idx) == SHA1.hash newBuffer)
@@ -167,7 +167,7 @@ handlePiecie appData (idx, offset) size peer
                  yield (show idx, newBuffer)
               
                  let newPeer = peer {P.buffer = BC.empty}
-                 recMessage appData newPeer  
+                 recMessage peerSink newPeer  
                 
       where         
          reqSize next 
@@ -219,19 +219,21 @@ flushLeftOver lo
 -- let source = (addCleanup (const $ liftIO $ putStrLn "Stopping ---")) $ CN.appSource (appData)
     
 
-tube :: P.Peer -> CN.AppData -> IO ()  
-tube peer appData = do  
+tube :: 
+   P.Peer
+   -> Source IO BC.ByteString 
+   -> Sink BC.ByteString IO ()
+   -> IO ()  
+tube peer getFrom sendTo = do  
    let infoHash = P.infoHash peer
-   sendHandshake infoHash appData
+   sendHandshake infoHash sendTo
   
-   let source = CN.appSource appData             
-   (nextSource, handshake) <- source $$+ recHandshake
-   
+   (nextSource, handshake) <- getFrom $$+ recHandshake
+    
    let global     = P.globalStatus peer
        infoSize   = P.sizeInfo peer
        peceHashes = P.peceHashes peer
                 
-  
    case handshake of
       Left l -> 
          print l
@@ -242,12 +244,15 @@ tube peer appData = do
       
          =$=  decodeMessage M.getMessage
       
-         =$=  recMessage appData peer 
+         =$=  recMessage sendTo peer 
       
          $$+- saveToFile  
      
    
+   
     
+                      
+                      
                       
 requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)
 requestNextAndUpdateGlobal pics global =
@@ -290,17 +295,17 @@ printArray global = do
                       
                       
                       
-sendInterested :: CN.AppData -> IO() 
-sendInterested appData = 
+sendInterested :: Sink BC.ByteString IO () -> IO() 
+sendInterested peerSink = 
   yield (M.encodeMessage M.Interested) 
-  $$ CN.appSink appData  
+  $$ peerSink  
 
   
   
-sendRequest :: CN.AppData -> (Int, Int, Int) -> IO() 
-sendRequest appData req = 
+sendRequest :: Sink BC.ByteString IO () -> (Int, Int, Int) -> IO() 
+sendRequest peerSink req = 
   yield (M.encodeMessage $ M.Request req) 
-  $$ CN.appSink appData  
+  $$ peerSink 
 
 
 logMSG :: Conduit BC.ByteString IO BC.ByteString   

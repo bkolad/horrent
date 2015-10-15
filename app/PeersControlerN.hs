@@ -25,7 +25,7 @@ import qualified Types as TP
 
 
 main::IO() 
-main = do result <- runExceptT $ start  "ubuntu.torrent" -- "tom.torrent"--"ubuntu.torrent"  -- "tom.torrent"--
+main = do result <- runExceptT $ start  "ubuntu.torrent"  -- "tom.torrent"--"ubuntu.torrent"  -- "tom.torrent"--
           print result
 
           
@@ -43,7 +43,10 @@ start tracker =
 runClient :: P.Peer -> IO ()
 runClient peer = 
     CN.runTCPClient (CN.clientSettings (P.port peer) (BC.pack $ P.hostName peer)) $ \appData -> do
-        T.tube peer appData
+        let source = CN.appSource appData   
+            peerSink   = CN.appSink appData     
+   
+        T.tube peer source peerSink
         
                              
 
