@@ -355,81 +355,29 @@ main = do
             
  
  
-data LogT m a = LogT {run :: m a} 
 
-
-
-instance Functor (LogT IO) where
-   fmap f (LogT l) = LogT $ fmap f l
-
-
-instance Applicative (LogT IO) where
-  pure = LogT . pure
-  (LogT l1) <*> (LogT l2) = LogT $ l1 <*> l2
-
-
-instance Monad (LogT IO) where
-  return = pure
-  (LogT l) >>= f = LogT $ do x <- l
-                             run (f x)
-
-
-   
-type Writer a = (WT.Writer [a] ())
-  
-
-
-
-instance Functor (LogT (WT.Writer [a])) where
-   fmap f (LogT l) = LogT $ fmap f l
-
-
-instance Applicative (LogT (WT.Writer [a])) where
-  pure = LogT . pure
-  (LogT l1) <*> (LogT l2) = LogT $ l1 <*> l2
-
-  
-                             
-instance Monad (LogT (WT.Writer [a])) where
-  return = pure
-  (LogT l) >>= f = LogT $ do x <- l
-                             run (f x)
-                             
                                                        
                              
 class  Logger l where
   logg ::  String -> l String
+  
 
-
-  
-instance MonadIO (LogT IO) where
-  liftIO :: IO a -> LogT IO a
-  liftIO a = LogT a
-  
-  
-   
-instance Logger (LogT IO) where
+instance Logger IO where
   logg a =  do liftIO $ print a
                return a
+               
 
-
-
-             
-instance Logger (LogT (WT.Writer [String])) where
-  logg a =  LogT (WT.writer (a, [a]))               
-  
-  
- 
-instance Logger (LogT []) where
-  logg :: (Show a) => a -> LogT [] a
-  logg a = LogT [a]
-              
+instance Logger (WT.Writer [String]) where
+  logg a =  (WT.writer (a, [a]))               
+               
+               
 
 
 src :: (Monad l, Logger l) => Source l Int
 src = do Trans.lift $ logg "xxx" 
          yield 1
          yield 2
+         
          
          
 si :: (Monad l, Logger l) => Sink Int l ()
@@ -445,8 +393,8 @@ si = do
           
 
 kk :: IO ()      
-kk = run (src $$ si)         
+kk = (src $$ si)         
       
 ll :: ((), [String])      
-ll = runIdentity $ WT.runWriterT $ run (src $$ si)         
+ll = runIdentity $ WT.runWriterT (src $$ si)         
                
