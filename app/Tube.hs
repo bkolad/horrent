@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, ViewPatterns #-}
+{-# LANGUAGE FlexibleInstances, InstanceSigs, LiberalTypeSynonyms #-}
 module Tube where
 
 import Data.Conduit
@@ -24,10 +24,20 @@ import Control.Monad.Trans.Resource
 import Data.Maybe
 import qualified Data.Binary.Get as G
 
+
+
+-- =======================
+
+import qualified Control.Monad.Trans as Trans
+
+import qualified Control.Monad.Writer as WT
+
+import Data.Functor.Identity
+
           --8192
 chunkSize = 16384  
 
-sendHandshake :: B.ByteString -> Sink BC.ByteString IO () -> IO ()  
+sendHandshake :: Monad m => B.ByteString -> Sink BC.ByteString m () -> m ()  
 sendHandshake infoHash peerSink = 
    yield handshake $$ peerSink
    where      
@@ -35,7 +45,9 @@ sendHandshake infoHash peerSink =
       
       
       
-recHandshake :: Sink BC.ByteString IO (TP.Perhaps (BC.ByteString, H.Handshake)) 
+recHandshake :: 
+   Monad m  
+   => Sink BC.ByteString m (TP.Perhaps (BC.ByteString, H.Handshake)) 
 recHandshake = 
    await >>= maybe (return $ Left "No handshake") 
                    (return . convertHandshake)                  
@@ -321,7 +333,7 @@ logMSG = do
 
 
             
-            
+{--            
             
 main :: IO ()
 main = do
@@ -334,5 +346,107 @@ main = do
         sink = CL.mapM_ print
         sink1 = CL.mapM_ (\x -> print ("lala "++(show x)))
         sink3 = getZipConduit $ ZipConduit sink <* ZipConduit sink1
-    src3 $$ conduit1 =$ sink3            
+        src3 $$ conduit1 =$ sink3        --}   
             
+            
+            
+            
+            
+            
+ 
+ 
+data LogT m a = LogT {run :: m a} 
+
+
+
+instance Functor (LogT IO) where
+   fmap f (LogT l) = LogT $ fmap f l
+
+
+instance Applicative (LogT IO) where
+  pure = LogT . pure
+  (LogT l1) <*> (LogT l2) = LogT $ l1 <*> l2
+
+
+instance Monad (LogT IO) where
+  return = pure
+  (LogT l) >>= f = LogT $ do x <- l
+                             run (f x)
+
+
+   
+type Writer a = (WT.Writer [a] ())
+  
+
+
+
+instance Functor (LogT (WT.Writer [a])) where
+   fmap f (LogT l) = LogT $ fmap f l
+
+
+instance Applicative (LogT (WT.Writer [a])) where
+  pure = LogT . pure
+  (LogT l1) <*> (LogT l2) = LogT $ l1 <*> l2
+
+  
+                             
+instance Monad (LogT (WT.Writer [a])) where
+  return = pure
+  (LogT l) >>= f = LogT $ do x <- l
+                             run (f x)
+                             
+                                                       
+                             
+class  Logger l where
+  logg ::  String -> l String
+
+
+  
+instance MonadIO (LogT IO) where
+  liftIO :: IO a -> LogT IO a
+  liftIO a = LogT a
+  
+  
+   
+instance Logger (LogT IO) where
+  logg a =  do liftIO $ print a
+               return a
+
+
+
+             
+instance Logger (LogT (WT.Writer [String])) where
+  logg a =  LogT (WT.writer (a, [a]))               
+  
+  
+ 
+instance Logger (LogT []) where
+  logg :: (Show a) => a -> LogT [] a
+  logg a = LogT [a]
+              
+
+
+src :: (Monad l, Logger l) => Source l Int
+src = do Trans.lift $ logg "xxx" 
+         yield 1
+         yield 2
+         
+         
+si :: (Monad l, Logger l) => Sink Int l ()
+si = do
+        xM <- await
+        case xM of
+              Nothing -> do
+                Trans.lift $ logg "aaa" 
+                return ()
+         
+              Just x -> do
+              si 
+          
+
+kk :: IO ()      
+kk = run (src $$ si)         
+      
+ll :: ((), [String])      
+ll = runIdentity $ WT.runWriterT $ run (src $$ si)         
+               
