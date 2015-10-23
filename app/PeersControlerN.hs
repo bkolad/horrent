@@ -2,30 +2,22 @@
 {-# LANGUAGE ScopedTypeVariables, OverloadedStrings #-}
 module PeersControlerN where
 
-import qualified BencodeParser as BP (infoHash)
 import qualified Connector as CN (liftEither, makePeers, getInfoHash)
 import Control.Monad.Except (ExceptT, liftIO, runExceptT)
 import qualified Peer as P
-import qualified Network as N
 import qualified StaticQueue as SQ
 import qualified Data.Conduit.Network as CN
--- import qualified Data.Conduit.Combinators as CC
 import Data.Conduit
-import Data.Tuple (swap)
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import qualified Handshake as H
-import Control.Monad.IO.Class
-import Data.Streaming.Network (HasReadWrite)
-import qualified Control.Concurrent.Async as Async
+import qualified Data.Conduit.Binary as CB
+import Control.Monad.Trans.Resource
 
 import qualified Tube as T
-import qualified Types as TP
 
 
 
 main::IO() 
-main = do result <- runExceptT $ start  "ubuntu.torrent"  -- "tom.torrent"--"ubuntu.torrent"  -- "tom.torrent"--
+main = do result <- runExceptT $ start   "tom.torrent"--"ubuntu.torrent"  -- "tom.torrent"--
           print result
 
           
@@ -46,9 +38,17 @@ runClient peer =
         let source = CN.appSource appData   
             peerSink   = CN.appSink appData     
    
-        T.tube peer source peerSink
+        T.tube peer source peerSink saveToFile
         
                              
-
+saveToFile :: Sink (String, BC.ByteString) IO ()
+saveToFile = do
+  awaitForever (liftIO . save)
+  where 
+    save :: (String, BC.ByteString) -> IO()
+    save (fN, c) =
+       runResourceT $ 
+        (yield c) 
+        $$ (CB.sinkFile ("downloads/" ++ fN))
           
                          

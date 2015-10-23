@@ -34,6 +34,12 @@ import qualified Control.Monad.Writer as WT
 
 import Data.Functor.Identity
 
+
+data Exec = DoNothing 
+           | Continue 
+           | YieldAndContinue      
+
+
           --8192
 chunkSize = 16384  
 
@@ -124,11 +130,21 @@ recMessage peerSink peer = do
        Just (M.Piece (idx, offset, chunkBuffer)) -> do     
             let newBuffer = (P.buffer peer) `BC.append` chunkBuffer
                 newPeer = peer {P.buffer = newBuffer}  
-                size = getSize idx (P.sizeInfo peer)           
-            handlePiecie peerSink (idx,offset) size newPeer  
+                size = getSize idx (P.sizeInfo peer)  
+                
+            whatToDo <- handlePiecie peerSink (idx,offset) size newPeer 
+            
+            case whatToDo of
+                 DoNothing -> return ()
+                 Continue -> recMessage peerSink newPeer
+                 YieldAndContinue -> do 
+                            yield (show idx, newBuffer)
+                            let clearPeer = newPeer {P.buffer = BC.empty}
+                            recMessage peerSink clearPeer
+          
+                  
      
-     
-      
+         
        Just M.Choke -> 
             return ()
       
@@ -143,20 +159,20 @@ recMessage peerSink peer = do
                    
       
       
-      
+          
           
 handlePiecie :: 
    Sink BC.ByteString IO ()
    ->(Int, Int)
    -> Int
    -> P.Peer
-   -> ConduitM M.Message (String, BC.ByteString) IO ()               
+   -> ConduitM M.Message (String, BC.ByteString) IO Exec               
 handlePiecie peerSink (idx, offset) size peer  
   | (offset < size - chunkSize) = do
        liftIO $ print ((show idx) ++ " " ++ (show offset))    
        liftIO $ sendRequest peerSink (idx, offset + chunkSize , chunkSize)
-      
-       recMessage peerSink peer 
+   
+       return Continue
        
        
  | otherwise = do     
@@ -166,7 +182,8 @@ handlePiecie peerSink (idx, offset) size peer
       nextM <- liftIO $ requestNextAndUpdateGlobal pieces global                 
       case nextM of
             Nothing -> 
-                 return ()
+                 return DoNothing 
+                 
             Just next -> do    
                 
                  liftIO $ setStatus idx (P.globalStatus peer)  TP.Done 
@@ -176,10 +193,7 @@ handlePiecie peerSink (idx, offset) size peer
                      hshEq = ((Seq.index (P.peceHashes peer) idx) == SHA1.hash newBuffer)
                  liftIO $ print hshEq
          
-                 yield (show idx, newBuffer)
-              
-                 let newPeer = peer {P.buffer = BC.empty}
-                 recMessage peerSink newPeer  
+                 return YieldAndContinue 
                 
       where         
          reqSize next 
@@ -229,14 +243,17 @@ flushLeftOver lo
   
                                        
 -- let source = (addCleanup (const $ liftIO $ putStrLn "Stopping ---")) $ CN.appSource (appData)
-    
+
+
+
 
 tube :: 
    P.Peer
    -> Source IO BC.ByteString 
    -> Sink BC.ByteString IO ()
+   -> Sink (String, BC.ByteString) IO ()
    -> IO ()  
-tube peer getFrom sendTo = do  
+tube peer getFrom sendTo saveTo = do  
    let infoHash = P.infoHash peer
    sendHandshake infoHash sendTo
   
@@ -249,6 +266,7 @@ tube peer getFrom sendTo = do
    case handshake of
       Left l -> 
          print l
+         
       Right (bitFieldLeftOver, hand) -> 
          nextSource 
     
@@ -258,7 +276,7 @@ tube peer getFrom sendTo = do
       
          =$=  recMessage sendTo peer 
       
-         $$+- saveToFile  
+         $$+- saveTo  
      
    
    
