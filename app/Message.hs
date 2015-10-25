@@ -41,17 +41,18 @@ instance Binary Message where
    put (Request (i, o, l)) = putWord32be 13 >> putWord8 6 >> put32Int i 
                                                           >> put32Int o 
                                                           >> put32Int l
-                                 
-       where  put32Int = putWord32be . fromIntegral    
+             
+   put (Bitfield bs)       = put32Int (1 + (B.length bs)) >> putWord8 5 
+                                                          >> putByteString bs   
    
+      
    
    put (Piece _)           = undefined
    put Cancel              = putWord32be 13 >> putWord8 8
    put Port                = putWord32be 3 >> putWord8 9
    put (Unknown _ _)       = undefined 
-   
-   
-   
+    
+    
    get = do 
             numBytes <- fromIntegral <$> getWord32be
             if (numBytes == 0)
@@ -68,21 +69,14 @@ instance Binary Message where
                              3 -> return NotInterested
                              4 -> return $ Have bs
                              5 -> return $ Bitfield bs
-                             6 -> return $ Request (undefined, undefined, undefined)
+                             6 -> return $ Request (0, 0, 0)
                              7 -> return $ Piece (toPiece bs)
                              8 -> return $ Cancel
                              9 -> return $ Port
                              x -> return $ Unknown (fromIntegral size) (fromIntegral x)
        
-  
-  
-
-         
-  
-getMessage :: Decoder Message   
-getMessage = runGetIncremental get  
-  
-            
+    
+put32Int = putWord32be . fromIntegral                
        
 toPiece bs = runGet getTripplet (BL.fromChunks [bs])
   where getTripplet :: Get (Int, Int, B.ByteString)
@@ -91,7 +85,17 @@ toPiece bs = runGet getTripplet (BL.fromChunks [bs])
                          rest <- getRemainingLazyByteString
                          return $ (numBytes, begin, (B.concat . BL.toChunks) rest)
    
-   
+  
+
+getFullMessage :: 
+   B.ByteString
+  -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Message)
+getFullMessage bs = decodeOrFail $ BL.fromStrict bs
+  
+getMessage :: Decoder Message   
+getMessage = runGetIncremental get  
+  
+  
   
 encodeMessage :: Message -> B.ByteString
 encodeMessage = BL.toStrict . encode

@@ -215,22 +215,7 @@ getSize next (nbOfPieces, normalSize, lastSize)
   
                                                                   
   
-  
-  
-  
- 
-  
-saveToFile :: Sink (String, BC.ByteString) IO ()
-saveToFile = do
-  awaitForever (liftIO . save)
-  where 
-    save :: (String, BC.ByteString) -> IO()
-    save (fN, c) =
-       runResourceT $ 
-        (yield c) 
-        $$ (CB.sinkFile ("downloads/" ++ fN))
-        
-  
+   
 
 flushLeftOver :: BC.ByteString -> Conduit BC.ByteString IO BC.ByteString
 flushLeftOver lo 
@@ -249,7 +234,7 @@ flushLeftOver lo
 
 tube :: 
    P.Peer
-   -> Source IO BC.ByteString 
+   -> ConduitM () BC.ByteString IO () --Source IO BC.ByteString 
    -> Sink BC.ByteString IO ()
    -> Sink (String, BC.ByteString) IO ()
    -> IO ()  
@@ -265,7 +250,7 @@ tube peer getFrom sendTo saveTo = do
                 
    case handshake of
       Left l -> 
-         print l
+         print $ "Bad Handshake : " ++l
          
       Right (bitFieldLeftOver, hand) -> 
          nextSource 

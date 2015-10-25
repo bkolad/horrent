@@ -53,6 +53,8 @@ decodeHandshake ::
   -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Handshake) 
 decodeHandshake bs =  decodeOrFail $ BL.fromStrict bs
 
+
+
 convertParsedOutput :: 
   Either (BL.ByteString , ByteOffset, String) (BL.ByteString, ByteOffset, Handshake) 
   -> TP.Perhaps (BC.ByteString, Handshake)

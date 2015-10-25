@@ -37,7 +37,7 @@ makePeers tracker =
   do torrentContent              <-  BP.parseFromFile tracker
      info@(numberOfPieces, _, _) <- liftEither $ getSizeInfo torrentContent   
      liftIO $ print (show info)
-     globalStatus                <- liftIO $ newGlobalBitField numberOfPieces     
+     globalStatus                <- liftIO $ TP.newGlobalBitField numberOfPieces     
      ipsAndPorts                 <- peersIpAndPortsFromTracker torrentContent           
      infoHash                    <- liftEither $ BC.pack <$> BP.infoHash torrentContent
      pHashes                     <- liftEither $ BP.piecesHashSeq torrentContent
