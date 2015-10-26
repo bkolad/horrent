@@ -50,13 +50,7 @@ sink = do xm <- await
                                k -> do liftIO $  print k
                                        sink
                                
-                               
-                       
-                       
-               
-          
-               
-            
+                                       
             
 save :: Sink (String, BC.ByteString) IO ()            
 save = awaitForever (liftIO . print)        

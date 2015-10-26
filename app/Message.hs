@@ -69,20 +69,31 @@ instance Binary Message where
                              3 -> return NotInterested
                              4 -> return $ Have bs
                              5 -> return $ Bitfield bs
-                             6 -> return $ Request (0, 0, 0)
+                             6 -> return $ Request (toRequest bs)
                              7 -> return $ Piece (toPiece bs)
                              8 -> return $ Cancel
                              9 -> return $ Port
                              x -> return $ Unknown (fromIntegral size) (fromIntegral x)
-       
+     
+     
+toRequest bs = runGet get (BL.fromChunks [bs])    
+  where  
+    get :: Get (Int, Int, Int)
+    get = do idx   <- fromIntegral <$> getWord32be
+             chunk <- fromIntegral <$> getWord32be
+             size  <- fromIntegral <$> getWord32be
+             return (idx, chunk, size)
+            
+    
+    
     
 put32Int = putWord32be . fromIntegral                
        
 toPiece bs = runGet getTripplet (BL.fromChunks [bs])
   where getTripplet :: Get (Int, Int, B.ByteString)
         getTripplet = do numBytes <- fromIntegral <$> getWord32be
-                         begin <- fromIntegral <$> getWord32be
-                         rest <- getRemainingLazyByteString
+                         begin    <- fromIntegral <$> getWord32be
+                         rest     <- getRemainingLazyByteString
                          return $ (numBytes, begin, (B.concat . BL.toChunks) rest)
    
   
