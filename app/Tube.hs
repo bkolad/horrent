@@ -19,7 +19,6 @@ import qualified Data.Sequence as Seq
 import qualified Types as TP
 import qualified Data.Array.MArray as MA
 import qualified Control.Concurrent.STM as STM
-import qualified Crypto.Hash.SHA1 as SHA1 
 import Control.Monad.Trans.Resource
 import Data.Maybe
 import qualified Data.Binary.Get as G
@@ -132,6 +131,8 @@ recMessage peerSink peer = do
                 newPeer = peer {P.buffer = newBuffer}  
                 size = getSize idx (P.sizeInfo peer)  
                 
+            liftIO $ print $ "+                         M.Piece " ++ (show (idx, offset, BC.length newBuffer))
+                
             whatToDo <- handlePiecie peerSink (idx,offset) size newPeer 
             
             case whatToDo of
@@ -185,14 +186,14 @@ handlePiecie peerSink (idx, offset) size peer
                  return DoNothing 
                  
             Just next -> do    
-                
+                 liftIO $ print ("Next " ++ (show next))      
+             
                  liftIO $ setStatus idx (P.globalStatus peer)  TP.Done 
                  liftIO $ sendRequest peerSink (next, 0 , reqSize next)
-                 liftIO $ print ("Next " ++ (show next))      
                  let newBuffer = P.buffer peer
-                     hshEq = ((Seq.index (P.peceHashes peer) idx) == SHA1.hash newBuffer)
-                 liftIO $ print hshEq
-         
+                     hshEq = ((Seq.index (P.peceHashes peer) idx) == P.hashFor newBuffer)
+                 liftIO $ print $ "HashEQ "++ (show hshEq)
+            
                  return YieldAndContinue 
                 
       where         

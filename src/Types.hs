@@ -1,11 +1,12 @@
 module Types  ( GlobalPiceInfo
               , newGlobalBitField
               , PiceInfo(..)
-              , Buffer
+              , HashInfo
               , liftEither
               , ExceptT
               , liftIO
               , runExceptT
+              , hashInfoFromList
               , NumberOfPieces
               , NormalPieceSize
               , LastPieceSize
@@ -35,9 +36,13 @@ data PiceInfo = Done | InProgress | NotHave
 
 type GlobalPiceInfo = TA.TArray Int PiceInfo 
 
-type Buffer = Seq.Seq BC.ByteString
+type HashInfo = Seq.Seq BC.ByteString
               
 
+hashInfoFromList :: [BC.ByteString] -> HashInfo            
+hashInfoFromList = Seq.fromList
+              
+              
 newGlobalBitField ::Int-> IO GlobalPiceInfo
 newGlobalBitField size = atomically $ newArray (0, size-1) NotHave  
 

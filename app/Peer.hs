@@ -6,6 +6,7 @@ import qualified Network as N
 import qualified Types as TP
 import qualified Data.Word as W
 import qualified Data.List as L
+import qualified Crypto.Hash.SHA1 as SHA1 
 
 
 data Peer = Peer { hostName :: N.HostName
@@ -15,7 +16,7 @@ data Peer = Peer { hostName :: N.HostName
                  , globalStatus :: TP.GlobalPiceInfo
                  , unChoked :: Bool
                  , buffer :: B.ByteString 
-                 , peceHashes :: TP.Buffer
+                 , peceHashes :: TP.HashInfo
                  , sizeInfo :: (TP.NumberOfPieces, TP.NormalPieceSize, TP.LastPieceSize)
                  }
 
@@ -41,7 +42,7 @@ convertToBits bs =
      
      
      
-  
+hashFor = SHA1.hash  
   
      
 intsToBools :: [Int] -> Int -> [Bool]

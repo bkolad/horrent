@@ -44,10 +44,12 @@ instance Binary Message where
              
    put (Bitfield bs)       = put32Int (1 + (B.length bs)) >> putWord8 5 
                                                           >> putByteString bs   
-   
-      
-   
-   put (Piece _)           = undefined
+         
+   put (Piece (i, o, bs))   = put32Int (9 + (B.length bs)) >> putWord8 7 
+                                                           >> put32Int i
+                                                           >> put32Int o
+                                                           >> putByteString bs 
+                          
    put Cancel              = putWord32be 13 >> putWord8 8
    put Port                = putWord32be 3 >> putWord8 9
    put (Unknown _ _)       = undefined 
@@ -79,10 +81,11 @@ instance Binary Message where
 toRequest bs = runGet get (BL.fromChunks [bs])    
   where  
     get :: Get (Int, Int, Int)
-    get = do idx   <- fromIntegral <$> getWord32be
-             chunk <- fromIntegral <$> getWord32be
-             size  <- fromIntegral <$> getWord32be
-             return (idx, chunk, size)
+    get = do
+       idx   <- fromIntegral <$> getWord32be
+       chunk <- fromIntegral <$> getWord32be
+       size  <- fromIntegral <$> getWord32be
+       return (idx, chunk, size)
             
     
     
@@ -91,10 +94,11 @@ put32Int = putWord32be . fromIntegral
        
 toPiece bs = runGet getTripplet (BL.fromChunks [bs])
   where getTripplet :: Get (Int, Int, B.ByteString)
-        getTripplet = do numBytes <- fromIntegral <$> getWord32be
-                         begin    <- fromIntegral <$> getWord32be
-                         rest     <- getRemainingLazyByteString
-                         return $ (numBytes, begin, (B.concat . BL.toChunks) rest)
+        getTripplet = do
+           numBytes <- fromIntegral <$> getWord32be
+           begin    <- fromIntegral <$> getWord32be
+           rest     <- getRemainingLazyByteString
+           return (numBytes, begin, (B.concat . BL.toChunks) rest)
    
   
 

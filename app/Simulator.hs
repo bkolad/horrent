@@ -16,21 +16,27 @@ import Data.Conduit
 hash = "01234567890123456789"
 
 
+chunkSize = 16384
 
+bs = BC.replicate chunkSize '1'
 
+hashP = P.hashFor bs
 
 
 peer :: IO P.Peer
 peer = do
   global <- (TP.newGlobalBitField 100)
-  return $ P.Peer "Host!" 0 [] (BC.pack  hash) global True (BC.pack "info") undefined undefined
+  return $ P.Peer "Host!" 0 [] (BC.pack  hash) global True (BC.empty) (TP.hashInfoFromList [hashP, hashP, hashP])  (3, 16384, 11)
 
 
+  
 source :: Source IO BC.ByteString
 source = do yield $ H.createHandshake (BC.pack hash) 
             yield $ M.encodeMessage $ M.Bitfield (P.hasIdxs [1,2,9])
             yield $ M.encodeMessage $ M.UnChoke
-
+            yield $ M.encodeMessage $ M.Piece(1, 0, bs)
+            yield $ M.encodeMessage $ M.Piece(2, 0, bs)
+          
             
             
                            
@@ -53,7 +59,7 @@ sink = do xm <- await
                                        
             
 save :: Sink (String, BC.ByteString) IO ()            
-save = awaitForever (liftIO . print)        
+save = awaitForever (\(x,y) -> (liftIO . print) x)        
             
             
 test = do 
