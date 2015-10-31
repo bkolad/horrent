@@ -34,7 +34,7 @@ import qualified Control.Monad.Writer as WT
 import Data.Functor.Identity
 
 
-data Exec = DoNothing 
+data Exec = LastPiece 
            | Continue 
            | YieldAndContinue      
 
@@ -131,12 +131,14 @@ recMessage peerSink peer = do
                 newPeer = peer {P.buffer = newBuffer}  
                 size = getSize idx (P.sizeInfo peer)  
                 
-            liftIO $ print $ "+                         M.Piece " ++ (show (idx, offset, BC.length newBuffer))
+            -- liftIO $ print $ "+                         M.Piece " ++ (show (idx, offset, BC.length newBuffer))
                 
             whatToDo <- handlePiecie peerSink (idx,offset) size newPeer 
             
             case whatToDo of
-                 DoNothing -> return ()
+                 LastPiece -> do   
+                            yield (show idx, newBuffer)                          
+                            return ()
                  Continue -> recMessage peerSink newPeer
                  YieldAndContinue -> do 
                             yield (show idx, newBuffer)
@@ -171,7 +173,7 @@ handlePiecie ::
 handlePiecie peerSink (idx, offset) size peer  
   | (offset < size - chunkSize) = do
        liftIO $ print ((show idx) ++ " " ++ (show offset))    
-       liftIO $ sendRequest peerSink (idx, offset + chunkSize , chunkSize)
+       liftIO $ sendRequest peerSink (idx, offset + chunkSize , min (size - chunkSize) chunkSize)
    
        return Continue
        
@@ -179,21 +181,23 @@ handlePiecie peerSink (idx, offset) size peer
  | otherwise = do     
       let pieces = P.pieces peer
           global = P.globalStatus peer
+          newBuffer = P.buffer peer
+          hshEq = ((Seq.index (P.peceHashes peer) idx) == P.hashFor newBuffer)
+     
+      liftIO $ print $ "HashEQ "++ (show hshEq)
+      liftIO $ print $ ""
+             
   
       nextM <- liftIO $ requestNextAndUpdateGlobal pieces global                 
       case nextM of
-            Nothing -> 
-                 return DoNothing 
+            Nothing -> do
+                 liftIO $ print "EXIT"
+                 return LastPiece 
                  
             Just next -> do    
-                 liftIO $ print ("Next " ++ (show next))      
-             
+                 liftIO $ print ("Next " ++ (show next))     
                  liftIO $ setStatus idx (P.globalStatus peer)  TP.Done 
                  liftIO $ sendRequest peerSink (next, 0 , reqSize next)
-                 let newBuffer = P.buffer peer
-                     hshEq = ((Seq.index (P.peceHashes peer) idx) == P.hashFor newBuffer)
-                 liftIO $ print $ "HashEQ "++ (show hshEq)
-            
                  return YieldAndContinue 
                 
       where         

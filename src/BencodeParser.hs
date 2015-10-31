@@ -38,14 +38,14 @@ piecesHash inDic = do infoDic <- find "info" inDic
                       return bStr 
                       
                       
-splitEvery :: Int -> BC.ByteString -> Buffer
+splitEvery :: Int -> BC.ByteString -> HashInfo
 splitEvery n bc = if (BC.null bc)
                      then Seq.empty
                      else s Seq.<| (splitEvery n e)
                   where (s,e) = BC.splitAt n bc 
 
                   
-piecesHashSeq :: BEncode -> Either String Buffer         
+piecesHashSeq :: BEncode -> Either String HashInfo         
 piecesHashSeq dic = (splitEvery 20) <$> piecesHash dic 
 
 piceSize :: BEncode ->Either String Int
