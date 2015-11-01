@@ -133,6 +133,8 @@ recMessage peerSink peer = do
                 
             -- liftIO $ print $ "+                         M.Piece " ++ (show (idx, offset, BC.length newBuffer))
                 
+                
+                
             whatToDo <- handlePiecie peerSink (idx,offset) size newPeer 
             
             case whatToDo of
@@ -170,12 +172,14 @@ handlePiecie ::
    -> Int
    -> P.Peer
    -> ConduitM M.Message (String, BC.ByteString) IO Exec               
-handlePiecie peerSink (idx, offset) size peer  
-  | (offset < size - chunkSize) = do
-       liftIO $ print ((show idx) ++ " " ++ (show offset))    
-       liftIO $ sendRequest peerSink (idx, offset + chunkSize , min (size - chunkSize) chunkSize)
+handlePiecie peerSink (idx, offset) pieceSize peer  
+  | (offset < sizeLeft) = do
+    
+       liftIO $ print ((show idx) ++ " " ++ (show offset) ++" "++ (show (BC.length (P.buffer peer))))    
+       liftIO $ sendRequest peerSink (idx, offset + chunkSize , min sizeLeft chunkSize) 
    
        return Continue
+       
        
        
  | otherwise = do     
@@ -184,7 +188,7 @@ handlePiecie peerSink (idx, offset) size peer
           newBuffer = P.buffer peer
           hshEq = ((Seq.index (P.peceHashes peer) idx) == P.hashFor newBuffer)
      
-      liftIO $ print $ "HashEQ "++ (show hshEq)
+      liftIO $ print $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
       liftIO $ print $ ""
              
   
@@ -209,6 +213,9 @@ handlePiecie peerSink (idx, offset) size peer
                  chunkSize      
                  
          lastS (nbOfPieces, normalSize, lastSize) = lastSize 
+         
+         sizeLeft = pieceSize - chunkSize
+    
         
      
        
