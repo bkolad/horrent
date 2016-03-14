@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main where
--- import PeersControler (start)
--- import Peer (showPeer)
+{-- import PeersControler (start)
+import Peer (showPeer) --}
 import Types
 import System.Directory
 import qualified Data.List as L
@@ -21,7 +21,7 @@ main = do result <-runExceptT $ start "tom.torrent" 5 --"karl_marx.torrent" 1
                               
 
                                    
-                                   --}                    
+--}                                                       
       
 isInteger s = case reads s :: [(Integer, String)] of
   [(_, "")] -> True
@@ -39,3 +39,4 @@ files = do allF <- getDirectoryContents "downloads/"
            print $ ((map show [0.. 78]) L.\\ sortedFiles) 
            M.mapM app sortedFiles
            
+main = app "tom.torrent"
