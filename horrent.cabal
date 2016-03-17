@@ -34,7 +34,7 @@ executable horrent-exec
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , horrent
-                     , directory 
+                     , directory
                      , bytestring
                      , mtl
                      , data-ordlist
@@ -54,6 +54,7 @@ executable horrent-exec
                      , streaming-commons
                      , resourcet
                      , HUnit
+                     , free
 
 
 

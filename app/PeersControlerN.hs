@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables, OverloadedStrings #-}
 module PeersControlerN where
 
-import qualified Connector as CN (liftEither, makePeers, getInfoHash)
+import qualified Connector as CN (liftEither, makePeers)
 import Control.Monad.Except (ExceptT, liftIO, runExceptT)
 import qualified Peer as P
 -- import qualified StaticQueue as SQ
@@ -12,7 +12,7 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.Conduit.Binary as CB
 import Control.Monad.Trans.Resource
 
-import qualified Tube as T
+import qualified TubeDSL as T
 
 
 
@@ -39,6 +39,12 @@ runClient peer =
             peerSink   = CN.appSink appData
 
         T.tube peer source peerSink saveToFile
+
+mkSource ::  CN.AppData
+         -> ConduitM i BC.ByteString IO ()
+mkSource appData = do
+    x<- CN.appSource appData
+    return x
 
 
 saveToFile :: Sink (String, BC.ByteString) IO ()
