@@ -13,10 +13,10 @@ import qualified Control.Concurrent.STM as STM
 
 import Control.Monad.Trans.Class (lift)
 
-import HorrentF
+import Action
 
 
-interpret :: Sink BC.ByteString IO () -> ActionF a -> IO a
+interpret :: Sink BC.ByteString IO () -> Action a -> IO a
 interpret peerSink program =
     case program of
         Free (SendInterested c) ->

@@ -16,7 +16,7 @@ import qualified Data.Binary.Get as G
 import Control.Monad.Trans.Class (lift)
 import qualified Data.Conduit.Network as CN
 import InterpretIO
-import HorrentF
+import Action
 
 
 data Exec = LastPiece
@@ -45,7 +45,7 @@ recHandshake =
 
 
 decodeMessage :: G.Decoder M.Message
-              -> Conduit BC.ByteString ActionF M.Message
+              -> Conduit BC.ByteString Action M.Message
 decodeMessage dec = do
     case dec of
         (G.Fail _ _ _) ->
@@ -63,7 +63,7 @@ decodeMessage dec = do
 
 recMessage ::
    P.Peer
-   -> Conduit M.Message ActionF (String, BC.ByteString)
+   -> Conduit M.Message Action (String, BC.ByteString)
 recMessage peer = do
   message <- await
 
@@ -146,7 +146,7 @@ handlePiecie ::
    (Int, Int)
    -> Int
    -> P.Peer
-   -> ConduitM M.Message (String, BC.ByteString) ActionF Exec
+   -> ConduitM M.Message (String, BC.ByteString) Action Exec
 handlePiecie (idx, offset) pieceSize peer
   | (offset < sizeLeft) = do
 
@@ -199,7 +199,7 @@ getSize next (nbOfPieces, normalSize, lastSize)
 
 
 flushLeftOver :: BC.ByteString
-              -> Conduit BC.ByteString ActionF BC.ByteString
+              -> Conduit BC.ByteString Action BC.ByteString
 flushLeftOver lo
    | (not . B.null) lo = do
         yield lo
