@@ -68,7 +68,6 @@ recMessage peer = do
   message <- await
 
   let pieces = P.pieces peer
-      global = P.globalStatus peer
 
   case message of
        Nothing -> do
@@ -94,7 +93,7 @@ recMessage peer = do
 
        Just M.UnChoke -> do
             lift $  logF "UnChoke"
-            nextM <- lift $ requestNextAndUpdateGlobalF pieces global
+            nextM <- lift $ requestNextAndUpdateGlobalF pieces
             case nextM of
                  Nothing ->
                       return ()
@@ -102,7 +101,8 @@ recMessage peer = do
                  Just next -> do
                       lift $ logF ("Req "++(show next))
                       lift $ sendRequestF (next, 0, chunkSize)
-                      lift $ setStatusF next global  TP.InProgress
+                      lift $ setStatusF next TP.InProgress
+                      lift $ logF ("Req NN")
 
                       recMessage peer
 
@@ -159,7 +159,6 @@ handlePiecie (idx, offset) pieceSize peer
 
  | otherwise = do
       let pieces = P.pieces peer
-          global = P.globalStatus peer
           newBuffer = P.buffer peer
           hshEq = ((Seq.index (P.peceHashes peer) idx) == P.hashFor newBuffer)
 
@@ -167,7 +166,7 @@ handlePiecie (idx, offset) pieceSize peer
       lift $ logF $ ""
 
 
-      nextM <- lift $ requestNextAndUpdateGlobalF pieces global
+      nextM <- lift $ requestNextAndUpdateGlobalF pieces
       case nextM of
             Nothing -> do
                  lift $ logF "EXIT"
@@ -175,7 +174,7 @@ handlePiecie (idx, offset) pieceSize peer
 
             Just next -> do
                  lift $ logF ("Next " ++ (show next))
-                 lift $ setStatusF idx (P.globalStatus peer)  TP.Done
+                 lift $ setStatusF idx TP.Done
                  lift $ sendRequestF (next, 0 , reqSize next)
                  return YieldAndContinue
 
@@ -231,7 +230,7 @@ tube peer getFrom sendTo saveTo = do
          print $ "Bad Handshake : " ++l
 
       Right (bitFieldLeftOver, hand) -> do
-          let gg = transPipe (interpret sendTo) ((flushLeftOver bitFieldLeftOver)
+          let gg = transPipe (interpret global sendTo) ((flushLeftOver bitFieldLeftOver)
                 =$=  decodeMessage M.getMessage
                 =$=  recMessage peer)
           nextSource $=+ gg $$+- saveTo

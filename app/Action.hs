@@ -18,9 +18,9 @@ import qualified Types as TP
 
 data ActionF a = SendInterested a
                 | Log String a
-                | ReqNextAndUpdate [Int] TP.GlobalPiceInfo ((Maybe Int) -> a)
+                | ReqNextAndUpdate [Int] ((Maybe Int) -> a)
                 | SendRequest (Int, Int, Int) a
-                | SetStatus Int TP.GlobalPiceInfo TP.PiceInfo a
+                | SetStatus Int TP.PiceInfo a
                 deriving (Functor)
 
 
@@ -35,15 +35,14 @@ logF str = Free $ Log str (Pure ())
 
 
 requestNextAndUpdateGlobalF :: [Int]
-                            -> TP.GlobalPiceInfo
                             -> Action (Maybe Int)
-requestNextAndUpdateGlobalF pieces global =
-    Free $ ReqNextAndUpdate pieces global Pure
+requestNextAndUpdateGlobalF pieces =
+    Free $ ReqNextAndUpdate pieces Pure
 
 
 sendRequestF :: (Int, Int, Int) -> Action ()
 sendRequestF req = Free $ SendRequest req (Pure ())
 
 
-setStatusF :: Int -> TP.GlobalPiceInfo -> TP.PiceInfo -> Action ()
-setStatusF x globab status = Free $ SetStatus x globab status (Pure ())
+setStatusF :: Int -> TP.PiceInfo -> Action ()
+setStatusF x status = Free $ SetStatus x status (Pure ())

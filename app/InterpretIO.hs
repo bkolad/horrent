@@ -1,6 +1,3 @@
-
-
-
 module InterpretIO where
 
 import Data.Conduit
@@ -15,29 +12,28 @@ import Control.Monad.Trans.Class (lift)
 
 import Action
 
-
-interpret :: Sink BC.ByteString IO () -> Action a -> IO a
-interpret peerSink program =
+interpret :: TP.GlobalPiceInfo -> Sink BC.ByteString IO () -> Action a -> IO a
+interpret global peerSink program =
     case program of
         Free (SendInterested c) ->
             do  sendInterested peerSink
-                interpret peerSink c
+                interpret global peerSink c
 
         Free (Log str c) ->
             do print ("LOG:: " ++ str)
-               interpret peerSink c
+               interpret global peerSink c
 
-        Free (ReqNextAndUpdate pieces global fun) ->
+        Free (ReqNextAndUpdate pieces fun) ->
             do m <-requestNextAndUpdateGlobal pieces global
-               interpret peerSink (fun m)
+               interpret global peerSink (fun m)
 
         Free (SendRequest req c) ->
             do sendRequest peerSink req
-               interpret peerSink c
+               interpret global peerSink c
 
-        Free (SetStatus x global status c) ->
+        Free (SetStatus x status c) ->
             do setStatus x global status
-               interpret peerSink c
+               interpret global peerSink c
 
         Pure x -> return x
 

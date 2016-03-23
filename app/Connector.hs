@@ -38,7 +38,10 @@ makePeers tracker =
      info@(numberOfPieces, _, _) <- liftEither $ getSizeInfo torrentContent
      liftIO $ print (show info)
      globalStatus                <- liftIO $ TP.newGlobalBitField numberOfPieces
+     liftIO $ print ("GET IPS")
      ipsAndPorts                 <- peersIpAndPortsFromTracker torrentContent
+     liftIO $ print ("GOT IPS")
+
      infoHash                    <- liftEither $ BC.pack <$> BP.infoHash torrentContent
      pHashes                     <- liftEither $ BP.piecesHashSeq torrentContent
      let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus False BC.empty pHashes info) ipsAndPorts
