@@ -55,6 +55,7 @@ executable horrent-exec
                      , resourcet
                      , HUnit
                      , free
+                     
 
 
 

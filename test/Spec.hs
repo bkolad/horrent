@@ -21,7 +21,7 @@ pieceSizeNotZero (torrent, content) =
     in assertEqual msg (Right True) notZ
 
 
-convertToBsAndParseBack :: ([Char], BP.BEncode) -> Assertion
+convertToBsAndParseBack :: (String, BP.BEncode) -> Assertion
 convertToBsAndParseBack (torrent, content) =
     let recContent = BP.parseFromBS (BP.toByteString content)
         msg = "Converting error for " ++ torrent

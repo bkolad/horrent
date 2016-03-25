@@ -75,7 +75,7 @@ recMessage peer = do
 
 
        Just (M.Bitfield b) -> do
-            let pList = P.convertToBits b
+            let pList = P.bsToPieceLs b
                 newPeer = peer {P.pieces = pList}
             lift $ logF "BF"
             lift $ sendInterestedF
@@ -160,7 +160,7 @@ handlePiecie (idx, offset) pieceSize peer
  | otherwise = do
       let pieces = P.pieces peer
           newBuffer = P.buffer peer
-          hshEq = ((Seq.index (P.peceHashes peer) idx) == P.hashFor newBuffer)
+          hshEq = ((Seq.index (P.pieceHashes peer) idx) == P.hashFor newBuffer)
 
       lift $ logF $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
       lift $ logF $ ""
@@ -223,8 +223,7 @@ tube peer getFrom sendTo saveTo = do
 
    let global     = P.globalStatus peer
        infoSize   = P.sizeInfo peer
-       peceHashes = P.peceHashes peer
-
+      
    case handshake of
       Left l ->
          print $ "Bad Handshake : " ++l
