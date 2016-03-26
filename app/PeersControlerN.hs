@@ -26,7 +26,7 @@ start :: String -> ExceptT String IO ()
 start tracker =
      do peers  <-  CN.makePeers tracker
         liftIO $ print (length peers)
-        let peer = peers !! 1
+        let peer = peers !! 0
         liftIO $ print peers
         liftIO $ runClient peer
         return ()
@@ -38,7 +38,8 @@ runClient peer =
     CN.runTCPClient (CN.clientSettings (P.port peer) (BC.pack $ P.hostName peer)) $ \appData -> do
         let source = CN.appSource appData
             peerSink   = CN.appSink appData
-
+        print "TUBE"
+        
         T.tube peer source peerSink saveToFile
 
 mkSource ::  CN.AppData

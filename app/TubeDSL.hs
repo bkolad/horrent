@@ -84,10 +84,12 @@ recMessage peer = do
 
 
        Just (M.Have b) -> do
-            lift $ logF "Have"
-
-            let pList = (P.fromBsToInt b) : P.pieces peer
+            let p = (P.fromBsToInt b)
+                pList = p : P.pieces peer
                 newPeer = peer {P.pieces = pList}
+
+            lift $ logF ("Have " ++ (show p))
+
             recMessage newPeer
 
 
@@ -216,9 +218,11 @@ tube ::
    -> IO ()
 tube peer getFrom sendTo saveTo = do
    let infoHash = P.infoHash peer
+   print $ "SNDING HS"
    sendHandshake infoHash sendTo
+   print $ "SNDING HS DONE"
 
--- m (ResumableSource m a, b)
+
    (nextSource, handshake) <- getFrom $$+ recHandshake
 
    let global     = P.globalStatus peer
