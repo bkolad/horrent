@@ -121,7 +121,7 @@ recMessage peer = do
                             yield (show idx, newBuffer)
                             return ()
                  Continue -> recMessage newPeer
-                 YieldAndContinue -> do
+                 YieldAndContinue -> do   -- Piece Done
                             yield (show idx, newBuffer)
                             let clearPeer = newPeer {P.buffer = BC.empty}
                             recMessage clearPeer
@@ -223,7 +223,7 @@ tube peer getFrom sendTo saveTo = do
 
    let global     = P.globalStatus peer
        infoSize   = P.sizeInfo peer
-      
+
    case handshake of
       Left l ->
          print $ "Bad Handshake : " ++l

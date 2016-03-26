@@ -2,7 +2,8 @@ module Peer ( fromBsToInt
             , pieceLsToBS
             , bsToPieceLs
             , Peer (..)
-            , hashFor) where
+            , hashFor
+            , rmdups) where
 
 import qualified Data.Bits as Bits
 import qualified Data.ByteString as B
@@ -31,7 +32,7 @@ instance Show Peer where
   show p = (hostName p) ++ " "++ (show $ port p) ++ " " ++ (show $ pieces p)
 
 
-
+fromBsToInt :: B.ByteString -> Int
 fromBsToInt bs =
    sum $ zipWith (\x y -> x*2^y) (reverse ws) [0,8..]
    where
@@ -40,15 +41,18 @@ fromBsToInt bs =
 
 pieceLsToBS :: [Int] -> B.ByteString
 pieceLsToBS ls =
-    B.pack $ (Map.elems . fillEmptyKyes . mkMap) ls
+    let sortedNoDup = rmdups ls
+    in B.pack $ (Map.elems . fillEmptyKyes . mkMap) sortedNoDup
 
 
 fillEmptyKyes ::  Map.Map Int W.Word8 -> Map.Map Int W.Word8
-fillEmptyKyes m =  L.foldl' fillEmpty m [0.. maxK]
+fillEmptyKyes m =  L.foldl' fillEmpty m getLs
     where
         fillEmpty acc k = Map.insertWith (+) k 0 acc
-        (maxK, _) = Map.findMax m
-
+        getLs = case Map.null m of
+                    True -> []
+                    _    -> let (maxK, _) = Map.findMax m
+                            in [0 .. maxK]
 
 mkMap :: [Int] -> Map.Map Int W.Word8
 mkMap ls = L.foldl' toMap Map.empty ls
@@ -64,6 +68,10 @@ bsToPieceLs bs =
    map snd $ filter fst $ zip bits [0 ..]
    where
        bits = [Bits.testBit w i| w <- B.unpack bs, i <- [7,6.. 0]]
+
+
+rmdups :: (Ord a) => [a] -> [a]
+rmdups = map head . L.group . L.sort
 
 
 hashFor = SHA1.hash

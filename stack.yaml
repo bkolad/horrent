@@ -3,5 +3,5 @@ packages:
 - '.'
 extra-deps: #[]
 - directory-1.2.5.1
-
+- tasty-hunit-adapter-1.1
 resolver: lts-5.8
