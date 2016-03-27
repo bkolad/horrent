@@ -3,7 +3,8 @@ module Peer ( fromBsToInt
             , bsToPieceLs
             , Peer (..)
             , hashFor
-            , rmdups) where
+            , rmdups
+            , fromIntToBs) where
 
 import qualified Data.Bits as Bits
 import qualified Data.ByteString as B
