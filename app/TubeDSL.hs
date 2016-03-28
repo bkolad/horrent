@@ -18,6 +18,8 @@ import qualified Data.Conduit.Network as CN
 import InterpretIO
 import Action
 
+import Debug.Trace
+
 
 data Exec = LastPiece
            | Continue
@@ -110,13 +112,16 @@ recMessage peer = do
 
 
 
-       Just (M.Piece (idx, offset, chunkBuffer)) -> do
+       Just (M.Piece p@(idx, offset, chunkBuffer)) -> do
             let newBuffer = (P.buffer peer) `BC.append` chunkBuffer
                 newPeer = peer {P.buffer = newBuffer}
                 size = getSize idx (P.sizeInfo peer)
 
+            let (idxa, offseta) = trace ("REC "++ (show (idx, offset))) (idx, offset)
 
-            whatToDo <- handlePiecie (idx,offset) size newPeer
+            lift $ logF ("GOT Piece " ++ (show idx) ++" "++ (show offset))
+
+            whatToDo <- handlePiecie (idxa,offseta) size newPeer
 
             case whatToDo of
                  LastPiece -> do
@@ -152,8 +157,11 @@ handlePiecie ::
 handlePiecie (idx, offset) pieceSize peer
   | (offset < sizeLeft) = do
 
-       lift $ logF ((show idx) ++ " " ++ (show offset) ++" "++ (show (BC.length (P.buffer peer))))
-       lift $ sendRequestF (idx, offset + chunkSize , min sizeLeft chunkSize)
+       let newOffset = offset + chunkSize
+       let (iii, no) = trace ("ASK FOR " ++ (show(idx, newOffset))) (idx, newOffset)
+
+       --lift $ logF ("ReqN "++ (show idx) ++ " " ++ (show offset) ++" "++ (show (BC.length (P.buffer peer))))
+       lift $ sendRequestF (iii, no , min sizeLeft chunkSize)
 
        return Continue
 
@@ -162,9 +170,11 @@ handlePiecie (idx, offset) pieceSize peer
  | otherwise = do
       let pieces = P.pieces peer
           newBuffer = P.buffer peer
-          hshEq = ((Seq.index (P.pieceHashes peer) idx) == P.hashFor newBuffer)
+    --      hshEq = ((Seq.index (P.pieceHashes peer) idx) == P.hashFor newBuffer)
 
-      lift $ logF $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
+
+
+      --lift $ logF $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
       lift $ logF $ ""
 
 
@@ -176,8 +186,9 @@ handlePiecie (idx, offset) pieceSize peer
 
             Just next -> do
                  lift $ logF ("Next " ++ (show next))
+                 let idxA = trace ("NEXT P "++ (show next)) next
                  lift $ setStatusF idx TP.Done
-                 lift $ sendRequestF (next, 0 , reqSize next)
+                 lift $ sendRequestF (idxA, 0 , reqSize next)
                  return YieldAndContinue
 
       where

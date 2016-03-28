@@ -1,4 +1,4 @@
-{-# LANGUAGE NoMonomorphismRestriction, ScopedTypeVariables, DoAndIfThenElse #-}
+{-# LANGUAGE NoMonomorphismRestriction, ScopedTypeVariables #-}
 
 module Connector ( liftEither, makePeers) where
 
@@ -66,15 +66,7 @@ getSizeInfo ::
 getSizeInfo torrentContent =
   do pieceSize   <- BP.piceSize torrentContent
      torrentSize <- BP.torrentSize torrentContent
-     return $ getSizeData torrentSize pieceSize
-       where
-         getSizeData torrentSize pieceSize =
-           let tSize = fromIntegral torrentSize
-               pSize = fromIntegral pieceSize
-               numberOfPieces = ceiling $ tSize / pSize
-               lastPieceSize = tSize `mod` pSize
-           in (numberOfPieces, pSize, lastPieceSize)
-
+     return $ TP.getSizeData torrentSize pieceSize
 
 
 peersIpAndPortsFromTracker ::
