@@ -11,9 +11,12 @@ import Data.Conduit
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.Conduit.Binary as CB
 import Control.Monad.Trans.Resource
+import qualified Types as TP
+
 
 import qualified TubeDSL as T
-
+import qualified Message as M
+import qualified InterpretIO as IPIO
 
 
 main::IO()
@@ -24,29 +27,51 @@ main = do result <- runExceptT $ start "tom.torrent"--"ubuntu.torrent"  -- "tom.
 
 start :: String -> ExceptT String IO ()
 start tracker =
-     do peers  <-  CN.makePeers tracker
+     do (peers, globalStatus)  <-  CN.makePeers tracker
         liftIO $ print (length peers)
-        let peer = peers !! 1
+        let peer = peers !! 2
         liftIO $ print peers
-        liftIO $ runClient peer
+        liftIO $ runClient globalStatus peer
         return ()
 
 
 
-runClient :: P.Peer -> IO ()
-runClient peer =
+runClient :: TP.GlobalPiceInfo -> P.Peer -> IO ()
+runClient globalStatus peer =
     CN.runTCPClient (CN.clientSettings (P.port peer) (BC.pack $ P.hostName peer)) $ \appData -> do
         let source = CN.appSource appData
             peerSink   = CN.appSink appData
         print "TUBE"
 
-        T.tube peer source peerSink saveToFile
+        tube globalStatus peer source peerSink
 
-mkSource ::  CN.AppData
-         -> ConduitM i BC.ByteString IO ()
-mkSource appData = do
-    x<- CN.appSource appData
-    return x
+
+tube ::
+   TP.GlobalPiceInfo
+   -> P.Peer
+   -> ConduitM () BC.ByteString IO ()
+   -> Sink BC.ByteString IO ()
+   -> IO ()
+tube global peer getFrom sendTo = do
+   let infoHash = P.infoHash peer
+   print $ "SNDING HS"
+   T.sendHandshake infoHash sendTo
+   print $ "SNDING HS DONE"
+
+
+   (nextSource, handshake) <- getFrom $$+ T.recHandshake
+
+   let infoSize   = P.sizeInfo peer
+
+   case handshake of
+      Left l ->
+         print $ "Bad Handshake : " ++l
+
+      Right (bitFieldLeftOver, hand) -> do
+          let gg = transPipe (InterpretIO.interpret global sendTo) ((T.flushLeftOver bitFieldLeftOver)
+                =$=  T.decodeMessage M.getMessage
+                =$=  T.recMessage peer)
+          nextSource $=+ gg $$+- saveToFile
 
 
 saveToFile :: Sink (String, BC.ByteString) IO ()

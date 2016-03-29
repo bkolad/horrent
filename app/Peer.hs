@@ -21,7 +21,7 @@ data Peer = Peer { hostName :: N.HostName
                  , port :: Int
                  , pieces :: [Int]
                  , infoHash :: B.ByteString
-                 , globalStatus :: TP.GlobalPiceInfo
+            --     , globalStatus :: TP.GlobalPiceInfo
                  , unChoked :: Bool
                  , buffer :: B.ByteString
                  , pieceHashes :: TP.HashInfo

@@ -1,6 +1,11 @@
 -- {-# LANGUAGE FlexibleInstances #-}
 
-module TubeDSL where
+module TubeDSL ( sendHandshake
+               , recHandshake
+               , decodeMessage
+               , recMessage
+               , flushLeftOver
+               ) where
 
 import Data.Conduit
 import qualified Data.Conduit.List as CL
@@ -15,7 +20,6 @@ import qualified Types as TP
 import qualified Data.Binary.Get as G
 import Control.Monad.Trans.Class (lift)
 import qualified Data.Conduit.Network as CN
-import InterpretIO
 import Action
 
 import Debug.Trace
@@ -218,33 +222,3 @@ flushLeftOver lo
         awaitForever yield
 
    | otherwise         = awaitForever yield
-
-
-
-tube ::
-   P.Peer
-   -> ConduitM () BC.ByteString IO () --Source IO BC.ByteString
-   -> Sink BC.ByteString IO ()
-   -> Sink (String, BC.ByteString) IO ()
-   -> IO ()
-tube peer getFrom sendTo saveTo = do
-   let infoHash = P.infoHash peer
-   print $ "SNDING HS"
-   sendHandshake infoHash sendTo
-   print $ "SNDING HS DONE"
-
-
-   (nextSource, handshake) <- getFrom $$+ recHandshake
-
-   let global     = P.globalStatus peer
-       infoSize   = P.sizeInfo peer
-
-   case handshake of
-      Left l ->
-         print $ "Bad Handshake : " ++l
-
-      Right (bitFieldLeftOver, hand) -> do
-          let gg = transPipe (interpret global sendTo) ((flushLeftOver bitFieldLeftOver)
-                =$=  decodeMessage M.getMessage
-                =$=  recMessage peer)
-          nextSource $=+ gg $$+- saveTo

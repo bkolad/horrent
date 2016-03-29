@@ -32,7 +32,7 @@ logMsg a = liftIO $ print a
 
 
 
-makePeers :: String -> ExceptT String IO [P.Peer]
+makePeers :: String -> ExceptT String IO ([P.Peer], TP.GlobalPiceInfo)
 makePeers tracker =
   do torrentContent              <-  BP.parseFromFile tracker
      info@(numberOfPieces, _, _) <- liftEither $ getSizeInfo torrentContent
@@ -43,10 +43,24 @@ makePeers tracker =
 
      infoHash                    <- liftEither $ BC.pack <$> BP.infoHash torrentContent
      pHashes                     <- liftEither $ BP.piecesHashSeq torrentContent
-     let peers = map (\(host, p) -> P.Peer host (fromIntegral p) [] infoHash globalStatus False BC.empty pHashes info) ipsAndPorts
+
+     let makePeer (host, p) =
+          P.Peer { P.hostName    = host
+                 , P.port        = (fromIntegral p)
+                 , P.pieces      = []
+                 , P.infoHash    = infoHash
+                 , P.unChoked    = False
+                 , P.buffer      = BC.empty
+                 , P.pieceHashes = pHashes
+                 , P.sizeInfo    = info
+                 }
+
+
+     let peers = map makePeer ipsAndPorts
      liftIO $ print ("GOT IPS")
 
-     return peers
+     return (peers, globalStatus)
+
 
 
 
