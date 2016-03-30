@@ -25,7 +25,7 @@ data Peer = Peer { hostName :: N.HostName
                  , unChoked :: Bool
                  , buffer :: B.ByteString
                  , pieceHashes :: TP.HashInfo
-                 , sizeInfo :: (TP.NumberOfPieces, TP.NormalPieceSize, TP.LastPieceSize)
+    --             , sizeInfo :: (TP.NumberOfPieces, TP.NormalPieceSize, TP.LastPieceSize)
                  }
 
 

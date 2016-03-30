@@ -27,32 +27,33 @@ main = do result <- runExceptT $ start "tom.torrent"--"ubuntu.torrent"  -- "tom.
 
 start :: String -> ExceptT String IO ()
 start tracker =
-     do (peers, globalStatus)  <-  CN.makePeers tracker
+     do (peers, globalStatus, sizeInfo)  <-  CN.makePeers tracker
         liftIO $ print (length peers)
         let peer = peers !! 2
         liftIO $ print peers
-        liftIO $ runClient globalStatus peer
+        liftIO $ runClient globalStatus sizeInfo peer
         return ()
 
 
 
-runClient :: TP.GlobalPiceInfo -> P.Peer -> IO ()
-runClient globalStatus peer =
+runClient :: TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO ()
+runClient globalStatus sizeInfo peer =
     CN.runTCPClient (CN.clientSettings (P.port peer) (BC.pack $ P.hostName peer)) $ \appData -> do
         let source = CN.appSource appData
             peerSink   = CN.appSink appData
         print "TUBE"
 
-        tube globalStatus peer source peerSink
+        tube globalStatus sizeInfo peer source peerSink
 
 
 tube ::
    TP.GlobalPiceInfo
+   -> TP.SizeInfo
    -> P.Peer
    -> ConduitM () BC.ByteString IO ()
    -> Sink BC.ByteString IO ()
    -> IO ()
-tube global peer getFrom sendTo = do
+tube global sizeInfo peer getFrom sendTo = do
    let infoHash = P.infoHash peer
    print $ "SNDING HS"
    T.sendHandshake infoHash sendTo
@@ -61,14 +62,13 @@ tube global peer getFrom sendTo = do
 
    (nextSource, handshake) <- getFrom $$+ T.recHandshake
 
-   let infoSize   = P.sizeInfo peer
 
    case handshake of
       Left l ->
          print $ "Bad Handshake : " ++l
 
       Right (bitFieldLeftOver, hand) -> do
-          let gg = transPipe (InterpretIO.interpret global sendTo) ((T.flushLeftOver bitFieldLeftOver)
+          let gg = transPipe (IPIO.interpret global sizeInfo sendTo) ((T.flushLeftOver bitFieldLeftOver)
                 =$=  T.decodeMessage M.getMessage
                 =$=  T.recMessage peer)
           nextSource $=+ gg $$+- saveToFile

@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts, RankNTypes #-}
 
-module  PeersControlerSimulator where
+module  PeersControlerSimulator (runSimulation)
+    where
 
 import qualified InterpretST as IPST
 
@@ -19,37 +20,29 @@ import qualified Types as TP
 import qualified Peer as P
 import qualified Data.Map as Map
 import qualified Data.List as L
-import Debug.Trace
-
-
-import System.IO.Unsafe
 
 
 
-pSize = 49152
+pSize = 16384--49152
 
 file = BC.pack (concat $ map show [0.. 100000])
 
-env = (splitBs 0 Map.empty file)
-
 infoSize = TP.getSizeData (BC.length file) pSize
 
-test :: MonadReader (Map.Map Int B.ByteString) m
-     => m ([(String, B.ByteString)], IPST.ActionST)
-test = runStateT testTube startState
 
---test2 :: (Monad m) => m ((), ActionST)
-test2 =  (runReader test env)
+runSimulation :: Int
+              -> B.ByteString
+              -> ([(String, B.ByteString)], IPST.ActionST)
+runSimulation pieceSize file =
+    let env = splitBs pieceSize 0 Map.empty file
+    in runReader (runStateT (testTube infoSize) startState) env
 
-cont = L.foldl' (\acc (x, b) -> B.append acc b) B.empty (fst test2)
 
-vals = BC.unpack cont
 
-kk = P.hashFor cont
-rr = P.hashFor file
-
-check = cont == file
-
+checkIfCorrect =
+    let pieces =  fst $ runSimulation pSize file
+        cont = L.foldl' (\acc (x, b) -> B.append acc b) B.empty pieces
+    in cont == file
 
 initPeer = P.Peer { P.hostName  = "Some NAme"
                   , P.port = 22
@@ -58,7 +51,6 @@ initPeer = P.Peer { P.hostName  = "Some NAme"
                   , P.unChoked = False
                   , P.buffer = B.empty
                   , P.pieceHashes  = error "no p hashes"
-                  , P.sizeInfo = infoSize
                   }
 
 startState = IPST.ActionST { IPST.logS = []
@@ -82,9 +74,9 @@ fileSink  = do
 
 testTube :: (MonadReader (Map.Map Int B.ByteString) m
             ,MonadState IPST.ActionST m)
-         =>  m [(String, B.ByteString)]
-testTube = networkSource
-     $= (transPipe IPST.interpret (TDSL.recMessage initPeer))
+         =>  TP.SizeInfo -> m [(String, B.ByteString)]
+testTube sizeInfo = networkSource
+     $= (transPipe (IPST.interpret sizeInfo) (TDSL.recMessage initPeer))
      $$ CL.consume
 
 
@@ -100,8 +92,7 @@ networkSource = do
     else
         do yield $ M.Bitfield $ P.pieceLsToBS (Map.keys env)
      --       yield $ M.Have (ecodeOnePeiece 55)
-           let msg = trace "UYYYYYY" M.UnChoke
-           yield msg
+           yield M.UnChoke
            networkSource
 
 
@@ -115,27 +106,30 @@ sendNetworkResp = do
         Just r@(i, off, size) -> do
             env <- ask
             let bs = getChunk env r
-            let k = trace ("!!!!!!!!!!!!!!!! "++(show i ++" "++show off)) i
-            yield $ M.Piece (k, off, bs)
+            yield $ M.Piece (i, off, bs)
             sendNetworkResp
 
 
-getChunk ::  Map.Map Int B.ByteString -> (Int, Int, Int) -> B.ByteString
+getChunk ::  Map.Map Int B.ByteString -> TP.SizeInfo -> B.ByteString
 getChunk m (index, offset, size) =
     let mbs = Map.lookup index m
     in case mbs of
          Nothing -> error  "Impossible"
-         Just bs -> B.take size (B.drop offset bs)
+         Just bs -> if size == 0 then
+                        error "size eq 0"
+                    else
+                        B.take size (B.drop offset bs)
 
 
 splitBs :: Int
-     -> Map.Map Int B.ByteString
-     -> B.ByteString
-     -> Map.Map Int B.ByteString
-splitBs acc m bs =
-    let (s, cont) = B.splitAt pSize bs
-        newMap = Map.insert acc s m
-    in  if B.null cont then
-            newMap
-        else
-            splitBs (acc+1) newMap cont
+         -> Int
+         -> Map.Map Int B.ByteString
+         -> B.ByteString
+         -> Map.Map Int B.ByteString
+splitBs pSize acc m bs =
+     let (s, cont) = B.splitAt pSize bs
+         newMap = Map.insert acc s m
+     in  if B.null cont then
+             newMap
+         else
+             splitBs pSize (acc+1) newMap cont

@@ -4,12 +4,14 @@ module Action (ActionF (SendInterested
                           , Log
                           , ReqNextAndUpdate
                           , SendRequest
-                          , SetStatus)
+                          , SetStatus
+                          , ReqSizeInfo)
                           , setStatusF
                           , sendInterestedF
                           , logF
                           , requestNextAndUpdateGlobalF
                           , sendRequestF
+                          , getSizeInfoF
                           , Action
                           , Free(Free,Pure)) where
 
@@ -21,6 +23,7 @@ data ActionF a = SendInterested a
                 | ReqNextAndUpdate [Int] ((Maybe Int) -> a)
                 | SendRequest (Int, Int, Int) a
                 | SetStatus Int TP.PiceInfo a
+                | ReqSizeInfo (TP.SizeInfo -> a)
                 deriving (Functor)
 
 
@@ -46,3 +49,6 @@ sendRequestF req = Free $ SendRequest req (Pure ())
 
 setStatusF :: Int -> TP.PiceInfo -> Action ()
 setStatusF x status = Free $ SetStatus x status (Pure ())
+
+getSizeInfoF :: Action TP.SizeInfo
+getSizeInfoF = Free $ ReqSizeInfo Pure

@@ -12,28 +12,35 @@ import Control.Monad.Trans.Class (lift)
 
 import Action
 
-interpret :: TP.GlobalPiceInfo -> Sink BC.ByteString IO () -> Action a -> IO a
-interpret global peerSink program =
+interpret :: TP.GlobalPiceInfo
+          -> TP.SizeInfo
+          -> Sink BC.ByteString IO ()
+          -> Action a
+          -> IO a
+interpret global sizeInfo peerSink program =
     case program of
         Free (SendInterested c) ->
             do  sendInterested peerSink
-                interpret global peerSink c
+                interpret global sizeInfo peerSink c
 
         Free (Log str c) ->
             do print ("LOG:: " ++ str)
-               interpret global peerSink c
+               interpret global sizeInfo peerSink c
 
         Free (ReqNextAndUpdate pieces fun) ->
             do m <-requestNextAndUpdateGlobal pieces global
-               interpret global peerSink (fun m)
+               interpret global sizeInfo peerSink (fun m)
 
         Free (SendRequest req c) ->
             do sendRequest peerSink req
-               interpret global peerSink c
+               interpret global sizeInfo peerSink c
 
         Free (SetStatus x status c) ->
             do setStatus x global status
-               interpret global peerSink c
+               interpret global sizeInfo peerSink c
+
+        Free (ReqSizeInfo fun) ->
+            interpret global sizeInfo peerSink (fun sizeInfo)
 
         Pure x -> return x
 
