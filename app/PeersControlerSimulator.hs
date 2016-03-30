@@ -110,7 +110,7 @@ sendNetworkResp = do
             sendNetworkResp
 
 
-getChunk ::  Map.Map Int B.ByteString -> TP.SizeInfo -> B.ByteString
+getChunk ::  Map.Map Int B.ByteString -> (Int, Int, Int) -> B.ByteString
 getChunk m (index, offset, size) =
     let mbs = Map.lookup index m
     in case mbs of

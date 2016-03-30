@@ -27,7 +27,8 @@ main = do result <- runExceptT $ start "tom.torrent"--"ubuntu.torrent"  -- "tom.
 
 start :: String -> ExceptT String IO ()
 start tracker =
-     do (peers, globalStatus, sizeInfo)  <-  CN.makePeers tracker
+     do (peers, sizeInfo)  <-  CN.makePeers tracker
+        globalStatus <- liftIO $ TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
         liftIO $ print (length peers)
         let peer = peers !! 2
         liftIO $ print peers

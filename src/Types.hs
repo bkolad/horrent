@@ -2,7 +2,8 @@
 
 module Types  ( GlobalPiceInfo
               , newGlobalBitField
-              , PiceInfo(..)
+              , PiceInfo (..)
+              , SizeInfo (..)
               , HashInfo
               , liftEither
               , ExceptT
@@ -32,7 +33,10 @@ type NumberOfPieces = Int
 type NormalPieceSize = Int
 type LastPieceSize = Int
 
-type SizeInfo = (NumberOfPieces, NormalPieceSize, LastPieceSize)
+data SizeInfo = SizeInfo { numberOfPieces :: NumberOfPieces
+                         , normalPieceSize :: NormalPieceSize
+                         , lastPieceSize :: LastPieceSize
+                         } deriving Show
 
 type Perhaps a = Either String a
 
@@ -58,10 +62,10 @@ liftEither = ExceptT . return
 
 getSizeData :: Int
             -> Int
-            -> (NumberOfPieces, NormalPieceSize, LastPieceSize)
+            -> SizeInfo
 getSizeData torrentSize pieceSize =
   let tSize = fromIntegral torrentSize
       pSize = fromIntegral pieceSize
       numberOfPieces = ceiling $ tSize / pSize
       lastPieceSize = tSize `mod` pSize
-  in (numberOfPieces, pSize, lastPieceSize)
+  in SizeInfo numberOfPieces pSize lastPieceSize

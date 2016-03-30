@@ -27,22 +27,13 @@ import Data.List
 type TorrentContent = BP.BEncode
 
 
-
-logMsg a = liftIO $ print a
-
-
-
-makePeers :: String -> ExceptT String IO ([P.Peer], TP.GlobalPiceInfo, SizeInfo)
+makePeers :: String -> ExceptT String IO ([P.Peer], SizeInfo)
 makePeers tracker =
-  do torrentContent              <-  BP.parseFromFile tracker
-     info@(numberOfPieces, _, _) <- liftEither $ getSizeInfo torrentContent
-     liftIO $ print (show info)
-     globalStatus                <- liftIO $ TP.newGlobalBitField numberOfPieces
-     liftIO $ print ("GET IPS")
-     ipsAndPorts                 <- peersIpAndPortsFromTracker torrentContent
-
-     infoHash                    <- liftEither $ BC.pack <$> BP.infoHash torrentContent
-     pHashes                     <- liftEither $ BP.piecesHashSeq torrentContent
+  do torrentContent <-  BP.parseFromFile tracker
+     sizeInfo       <- liftEither $ getSizeInfo torrentContent
+     ipsAndPorts    <- peersIpAndPortsFromTracker torrentContent
+     infoHash       <- liftEither $ BC.pack <$> BP.infoHash torrentContent
+     pHashes        <- liftEither $ BP.piecesHashSeq torrentContent
 
      let makePeer (host, p) =
           P.Peer { P.hostName    = host
@@ -54,37 +45,21 @@ makePeers tracker =
                  , P.pieceHashes = pHashes
                  }
 
-
      let peers = map makePeer ipsAndPorts
-     liftIO $ print ("GOT IPS")
-
-     return (peers, globalStatus, info)
+     return (peers, sizeInfo)
 
 
 
-
-
-{--
-getInfoHash :: String -> ExceptT String IO B.ByteString
-getInfoHash tracker =
-     do torrentContent <-  BP.parseFromFile tracker
-        infoHash <- liftEither $ BC.pack <$> BP.infoHash torrentContent
-        return infoHash
-
---}
-
-getSizeInfo ::
-    TorrentContent ->
-    Either String TP.SizeInfo
+getSizeInfo :: TorrentContent
+            -> Either String TP.SizeInfo
 getSizeInfo torrentContent =
   do pieceSize   <- BP.piceSize torrentContent
      torrentSize <- BP.torrentSize torrentContent
      return $ TP.getSizeData torrentSize pieceSize
 
 
-peersIpAndPortsFromTracker ::
-    TorrentContent
-    -> ExceptT String IO [(N.HostName, N.PortNumber)]
+peersIpAndPortsFromTracker :: TorrentContent
+                           -> ExceptT String IO [(N.HostName, N.PortNumber)]
 peersIpAndPortsFromTracker torrentContent =
     do urlTracker <- liftEither $ trackerUrl torrentContent
        resp       <- liftIO . getResponseFromTracker $ urlTracker
@@ -92,42 +67,44 @@ peersIpAndPortsFromTracker torrentContent =
        return $ getIPandPort peersBS
 
 
-
 type TrackerResponse = String
 type URL = String
 
 
 getResponseFromTracker :: URL -> IO TrackerResponse
-getResponseFromTracker url = HTTP.simpleHTTP (HTTP.getRequest url)
-                             >>= HTTP.getResponseBody
+getResponseFromTracker url =
+    HTTP.simpleHTTP (HTTP.getRequest url)
+    >>= HTTP.getResponseBody
 
 
 trackerUrl :: TorrentContent -> Either String URL
 trackerUrl fromDic =
-         do ann <- BP.annouce fromDic
-            vars <- encodedVars <$> (BP.infoHash fromDic)
-            return $ ann++"?"++vars
-         where
-               encodedVars hash =
-                Encoder.urlEncodeVars [("info_hash", hash),
-                                       ("peer_id", H.myId),
-                                       ("left", "1000000000"),
-                                       ("port", "6881"),
-                                       ("compact", "1"),
-                                       ("uploaded", "0"),
-                                       ("downloaded", "0"),
-                                       ("event", "started")]
+    do ann <- BP.annouce fromDic
+       vars <- encodedVars <$> (BP.infoHash fromDic)
+       return $ ann++"?"++vars
+    where
+        encodedVars hash =
+            Encoder.urlEncodeVars [("info_hash", hash),
+                                   ("peer_id", H.myId),
+                                   ("left", "1000000000"),
+                                   ("port", "6881"),
+                                   ("compact", "1"),
+                                   ("uploaded", "0"),
+                                   ("downloaded", "0"),
+                                   ("event", "started")]
 
 
 
 getIPandPort :: B.ByteString -> [(N.HostName, N.PortNumber)]
 getIPandPort bs = runGet get32and16b (BL.fromChunks [bs])
-         where
-               get32and16b :: Get [(N.HostName, N.PortNumber)]
-               get32and16b = do empty <- isEmpty
-                                if empty
-                                then return []
-                                else do ip <- show <$> getWord32be
-                                        port <- fromIntegral <$> getWord16be
-                                        rest <- get32and16b
-                                        return $ (ip, port):rest
+    where
+        get32and16b :: Get [(N.HostName, N.PortNumber)]
+        get32and16b =
+            do empty <- isEmpty
+               if empty then
+                   return []
+               else do
+                   ip <- show <$> getWord32be
+                   port <- fromIntegral <$> getWord16be
+                   rest <- get32and16b
+                   return $ (ip, port):rest

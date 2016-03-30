@@ -37,7 +37,6 @@ sendHandshake infoHash peerSink =
       handshake = H.createHandshake infoHash
 
 
-
 recHandshake ::
    Monad m
    => Sink BC.ByteString m (TP.Perhaps (BC.ByteString, H.Handshake))
@@ -121,7 +120,7 @@ recMessage peer = do
             sizeInfo <- lift $ getSizeInfoF
             let newBuffer = (P.buffer peer) `BC.append` chunkBuffer
                 newPeer = peer {P.buffer = newBuffer}
-                size = getSize idx sizeInfo --(P.sizeInfo peer)
+                size = getSize idx sizeInfo
 
             lift $ logF ("GOT Piece " ++ (show idx) ++" "++ (show offset))
 
@@ -152,11 +151,8 @@ recMessage peer = do
             return ()
 
 
-
-
-
 handlePiecie ::
-   (Int, Int, Int)
+   TP.SizeInfo
    -> (Int, Int)
    -> Int
    -> P.Peer
@@ -200,20 +196,18 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
       where
          reqSize next sizeInfo
             | (last (P.pieces peer) == next) =
-                 min (lastS (sizeInfo)) chunkSize
+                 min (TP.lastPieceSize sizeInfo) chunkSize
 
             | otherwise =
                  chunkSize
-
-         lastS (nbOfPieces, normalSize, lastSize) = lastSize
 
          sizeLeft = pieceSize - chunkSize
 
 
 
-getSize next (nbOfPieces, normalSize, lastSize)
-   | (next == nbOfPieces -1) = lastSize
-   | otherwise               = normalSize
+getSize next sizeInfo
+   | (next == (TP.numberOfPieces sizeInfo) -1) = TP.lastPieceSize sizeInfo
+   | otherwise               = TP.normalPieceSize sizeInfo
 
 
 flushLeftOver :: BC.ByteString
