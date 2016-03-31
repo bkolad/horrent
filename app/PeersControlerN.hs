@@ -2,7 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables, OverloadedStrings #-}
 module PeersControlerN where
 
-import qualified Connector as CN (liftEither, makePeers)
+import qualified Connector as CN (makePeers)
 import Control.Monad.Except (ExceptT, liftIO, runExceptT)
 import qualified Peer as P
 -- import qualified StaticQueue as SQ
@@ -30,7 +30,7 @@ start tracker =
      do (peers, sizeInfo)  <-  CN.makePeers tracker
         globalStatus <- liftIO $ TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
         liftIO $ print (length peers)
-        let peer = peers !! 2
+        let peer = peers !! 1
         liftIO $ print peers
         liftIO $ runClient globalStatus sizeInfo peer
         return ()

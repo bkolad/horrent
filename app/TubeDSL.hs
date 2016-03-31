@@ -206,7 +206,7 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
 
 
 getSize next sizeInfo
-   | (next == (TP.numberOfPieces sizeInfo) -1) = TP.lastPieceSize sizeInfo
+   | (next == (TP.numberOfPieces sizeInfo) - 1) = TP.lastPieceSize sizeInfo
    | otherwise               = TP.normalPieceSize sizeInfo
 
 

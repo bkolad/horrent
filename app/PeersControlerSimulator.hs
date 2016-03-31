@@ -23,11 +23,30 @@ import qualified Data.List as L
 
 
 
-pSize = 16384--49152
+pSizeG = 2593--39545--49653
 
-file = BC.pack (concat $ map show [0.. 100000])
+fileG = BC.pack (concat $ map show [0.. 1573])
+
+
+checkIfCorrect =
+    let pieces =  fst $ runSimulation pSizeG fileG
+        cont = L.foldl' (\acc (x, b) -> B.append acc b) B.empty pieces
+    in cont == fileG
+
+
+
+--infoSize = TP.getSizeData (BC.length fileG) pSizeG
+
+{--
+
+
+pSize = 44180--49152
+
+file = BC.pack (concat $ map show [0.. 44180]) --100000])
 
 infoSize = TP.getSizeData (BC.length file) pSize
+--}
+
 
 
 runSimulation :: Int
@@ -35,14 +54,15 @@ runSimulation :: Int
               -> ([(String, B.ByteString)], IPST.ActionST)
 runSimulation pieceSize file =
     let env = splitBs pieceSize 0 Map.empty file
+        infoSize = TP.getSizeData (BC.length file) pieceSize
     in runReader (runStateT (testTube infoSize) startState) env
 
-
+{--
 
 checkIfCorrect =
     let pieces =  fst $ runSimulation pSize file
         cont = L.foldl' (\acc (x, b) -> B.append acc b) B.empty pieces
-    in cont == file
+    in cont == file --}
 
 initPeer = P.Peer { P.hostName  = "Some NAme"
                   , P.port = 22

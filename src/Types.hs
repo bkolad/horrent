@@ -67,5 +67,6 @@ getSizeData torrentSize pieceSize =
   let tSize = fromIntegral torrentSize
       pSize = fromIntegral pieceSize
       numberOfPieces = ceiling $ tSize / pSize
-      lastPieceSize = tSize `mod` pSize
+      lps = tSize `mod` pSize
+      lastPieceSize = if lps == 0 then  pSize else lps
   in SizeInfo numberOfPieces pSize lastPieceSize
