@@ -21,11 +21,10 @@ data Peer = Peer { hostName :: N.HostName
                  , port :: Int
                  , pieces :: [Int]
                  , infoHash :: B.ByteString
-            --     , globalStatus :: TP.GlobalPiceInfo
                  , unChoked :: Bool
                  , buffer :: B.ByteString
                  , pieceHashes :: TP.HashInfo
-    --             , sizeInfo :: (TP.NumberOfPieces, TP.NormalPieceSize, TP.LastPieceSize)
+            --     , pendingPiece :: Maybe Int
                  }
 
 

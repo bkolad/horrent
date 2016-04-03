@@ -51,13 +51,13 @@ loop queue action =
      do x <- readFromQueue queue
         case x of
              Just k -> do
-                 catch ({--timeout tOut --} (action  k)) (\e -> do
+            {--     catch ({--timeout tOut --} (action  k)) (\e -> do
                      let err = show (e :: SomeException)
                      (print "BUUU")
                      return ())
+--}
 
-
---                 timeout (45*60 * 1000000) (action  k)
+                 (action  k)
                  loop queue action
              Nothing -> return()
 

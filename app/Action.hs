@@ -1,23 +1,24 @@
 {-# LANGUAGE DeriveFunctor #-}
 
-module Action (ActionF (SendInterested
-                          , Log
-                          , ReqNextAndUpdate
-                          , SendRequest
-                          , SetStatus
-                          , ReqSizeInfo)
-                          , setStatusF
-                          , sendInterestedF
-                          , logF
-                          , requestNextAndUpdateGlobalF
-                          , sendRequestF
-                          , getSizeInfoF
-                        --  , registerLsF
-                          , Action
-                          , Free(Free,Pure)) where
+module Action ( ActionF (..)
+              , setStatusF
+              , sendInterestedF
+              , logF
+              , requestNextAndUpdateGlobalF
+              , sendRequestF
+              , getSizeInfoF
+              , readDataWithTimeoutF
+              , saveToFileF
+              , getPendingPieceF
+            --  , registerLsF
+              , Action
+              , Free(Free,Pure)
+              ) where
 
 import Control.Monad.Free (Free(Free,Pure))
 import qualified Types as TP
+import qualified Data.ByteString as B
+
 
 data ActionF a = SendInterested a
                 | Log String a
@@ -25,6 +26,9 @@ data ActionF a = SendInterested a
                 | SendRequest (Int, Int, Int) a
                 | SetStatus Int TP.PiceInfo a
                 | ReqSizeInfo (TP.SizeInfo -> a)
+                | ReadData ((Maybe B.ByteString) -> a)
+                | SaveToFile String B.ByteString a
+                | GetPendingPiece ((Maybe Int) -> a)
                 deriving (Functor)
 
 
@@ -53,6 +57,16 @@ setStatusF x status = Free $ SetStatus x status (Pure ())
 
 getSizeInfoF :: Action TP.SizeInfo
 getSizeInfoF = Free $ ReqSizeInfo Pure
+
+readDataWithTimeoutF :: Action (Maybe B.ByteString)
+readDataWithTimeoutF = Free $ ReadData Pure
+
+saveToFileF :: String -> B.ByteString -> Action ()
+saveToFileF fN c = Free $ SaveToFile fN c (Pure ())
+
+getPendingPieceF :: Action (Maybe Int)
+getPendingPieceF = Free $ GetPendingPiece Pure
+
 
 --registerLsF :: [Int] -> Action ()
 --registerLsF ls = Free $ Ragister ls (Pure ())

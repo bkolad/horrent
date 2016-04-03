@@ -11,50 +11,61 @@ import qualified Control.Concurrent as CC
 import Control.Monad.Trans.Class (lift)
 --import Control.Monad.IO.Class
 import qualified System.Timeout as TOUT
+import qualified Data.Streaming.Network as SN
+import qualified Data.Conduit.Binary as CB
+import qualified Control.Monad.Trans.Resource as R
+
+
+
 
 import Action
 
 
 
-interpretWithTimeOut :: Int
-     -> TP.GlobalPiceInfo
-     -> TP.SizeInfo
-     -> Sink BC.ByteString IO ()
-     -> Action a
-     -> IO (Maybe a)
-interpretWithTimeOut tout  global sizeInfo peerSink program =
-    TOUT.timeout tout (interpret global sizeInfo peerSink program)
-
-interpret :: TP.GlobalPiceInfo
+interpret :: SN.AppData
+          -> TP.GlobalPiceInfo
           -> TP.SizeInfo
           -> Sink BC.ByteString IO ()
+          -> Maybe Int
           -> Action a
           -> IO a
-interpret global sizeInfo peerSink program =
+interpret appData global sizeInfo peerSink mPending program =
     case program of
         Free (SendInterested c) -> --liftIO $
             do  sendInterested peerSink
-                interpret global sizeInfo peerSink c
+                interpret appData global sizeInfo peerSink mPending c
 
         Free (Log str c) ->
             do tID <- CC.myThreadId
                print ("LOG:: " ++ str ++" "++ (show tID) )
-               interpret global sizeInfo peerSink c
+               interpret appData global sizeInfo peerSink mPending c
 
         Free (ReqNextAndUpdate pieces fun) ->
             do m <-requestNextAndUpdateGlobal pieces global
-               interpret global sizeInfo peerSink (fun m)
+               interpret appData global sizeInfo peerSink mPending (fun m)
 
         Free (SendRequest req c) ->
             do sendRequest peerSink req
-               interpret global sizeInfo peerSink c
+               let (pending, _, _) = req
+               interpret appData global sizeInfo peerSink (Just pending) c
 
         Free (SetStatus x status c) ->
             do setStatus x global status
-               interpret global sizeInfo peerSink c
+               interpret appData global sizeInfo peerSink mPending c
 
         Free (ReqSizeInfo fun) ->
-            interpret global sizeInfo peerSink (fun sizeInfo)
+            interpret appData global sizeInfo peerSink mPending (fun sizeInfo)
+
+        Free (ReadData fun) ->
+            do m <- TOUT.timeout (2*1000000) (SN.appRead appData)
+               interpret appData global sizeInfo peerSink mPending (fun m)
+
+        Free (SaveToFile fN content c) ->
+           do R.runResourceT $ (yield content) $$ (CB.sinkFile ("downloads/" ++ fN))
+              interpret appData global sizeInfo peerSink mPending c
+
+        Free (GetPendingPiece fun) ->
+               interpret appData global sizeInfo peerSink mPending (fun mPending)
 
         Pure x -> return x
 
@@ -73,6 +84,9 @@ requestNextAndUpdateGlobal pics global =
                      MA.writeArray global x TP.InProgress
                      return $ Just x
                   TP.Registered -> do
+                     MA.writeArray global x TP.InProgress
+                     return $ Just x
+                  TP.TimeOut k -> do
                      MA.writeArray global x TP.InProgress
                      return $ Just x
                   TP.InProgress -> reqNext xs global

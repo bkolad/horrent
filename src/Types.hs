@@ -27,6 +27,8 @@ import Control.Concurrent.STM
 import Data.Array.MArray
 import Control.Monad.Trans.Except
 import Control.Monad.IO.Class (liftIO)
+import qualified Network as N
+
 
 
 
@@ -42,7 +44,7 @@ data SizeInfo = SizeInfo { numberOfPieces :: NumberOfPieces
 type Perhaps a = Either String a
 
 
-data PiceInfo = Done | InProgress | NotHave | Registered
+data PiceInfo = Done | InProgress | NotHave | Registered | TimeOut N.HostName
   deriving (Show, Eq)
 
 type GlobalPiceInfo = TA.TArray Int PiceInfo

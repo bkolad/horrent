@@ -111,7 +111,7 @@ recMessage peer = do
                       lift $ logF ("Req "++(show next))
                       lift $ sendRequestF (next, 0, chunkSize)
                       lift $ setStatusF next TP.InProgress
-                    
+
                       recMessage peer
 
 
@@ -191,6 +191,8 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
                  lift $ setStatusF idx TP.Done
 
                  lift $ sendRequestF (next, 0 , reqSize next sizeInfo)
+                 lift $ setStatusF next TP.InProgress
+           
                  return YieldAndContinue
 
       where

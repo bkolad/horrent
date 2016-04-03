@@ -36,13 +36,14 @@ makePeers tracker =
      pHashes        <- TP.liftEither $ BP.piecesHashSeq torrentContent
 
      let makePeer (host, p) =
-          P.Peer { P.hostName    = host
-                 , P.port        = (fromIntegral p)
-                 , P.pieces      = []
-                 , P.infoHash    = infoHash
-                 , P.unChoked    = False
-                 , P.buffer      = BC.empty
-                 , P.pieceHashes = pHashes
+          P.Peer { P.hostName     = host
+                 , P.port         = (fromIntegral p)
+                 , P.pieces       = []
+                 , P.infoHash     = infoHash
+                 , P.unChoked     = False
+                 , P.buffer       = BC.empty
+                 , P.pieceHashes  = pHashes
+    --             , P.pendingPiece = Nothing
                  }
 
      let peers = map makePeer ipsAndPorts
