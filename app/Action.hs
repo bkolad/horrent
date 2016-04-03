@@ -12,6 +12,7 @@ module Action (ActionF (SendInterested
                           , requestNextAndUpdateGlobalF
                           , sendRequestF
                           , getSizeInfoF
+                        --  , registerLsF
                           , Action
                           , Free(Free,Pure)) where
 
@@ -52,3 +53,6 @@ setStatusF x status = Free $ SetStatus x status (Pure ())
 
 getSizeInfoF :: Action TP.SizeInfo
 getSizeInfoF = Free $ ReqSizeInfo Pure
+
+--registerLsF :: [Int] -> Action ()
+--registerLsF ls = Free $ Ragister ls (Pure ())

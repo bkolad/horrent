@@ -129,7 +129,7 @@ bencodeParser = bInt <|> (BStr <$> bString) <|> bList <|> bDic
 
 {--TESTS--}
 
-torrent = "tom2.torrent"--"karl_marx.torrent"--"tom.torrent"--"tom.torrent" -- "karl_marx.torrent"--"tom.torrent" --
+torrent = "ubuntu.torrent"--"karl_marx.torrent"--"tom.torrent"--"tom.torrent" -- "karl_marx.torrent"--"tom.torrent" --
 
 printer:: IO()
 printer = do content <- runExceptT $ parseFromFile torrent

@@ -11,32 +11,22 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Control.Monad as M
 import Control.Applicative
 
-{--
-main::IO() 
-main = do result <-runExceptT $ start "tom.torrent" 5 --"karl_marx.torrent" 1
-          case result of
-               Left s -> print s
-               Right ps -> do ls<-mapM showPeer ps
-                              print ls
-                              
 
-                                   
---}                                                       
-      
 isInteger s = case reads s :: [(Integer, String)] of
   [(_, "")] -> True
-  _         -> False      
-      
+  _         -> False
+
 
 app fN= do print fN
-           cont <- B.readFile ("downloads/"++fN)       
-           B.appendFile "fil.jpg" cont
-      
+           cont <- B.readFile ("downloads/"++fN)
+           B.appendFile "cont.xx" cont
 
-      
+
+
 files = do allF <- getDirectoryContents "downloads/"
            let sortedFiles = sortOn (read :: String -> Int) $ filter isInteger allF
-           print $ ((map show [0.. 78]) L.\\ sortedFiles) 
-           M.mapM app sortedFiles
-           
-main = app "tom.torrent"
+           print sortedFiles
+           print $ ((map show [0.. 2247]) L.\\ sortedFiles)
+    --       M.mapM app sortedFiles
+
+main = app "ub.torrent"

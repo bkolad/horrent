@@ -58,6 +58,7 @@ executable horrent-exec
                      , tasty
                      , tasty-hunit
                      , tasty-quickcheck
+                     , conduit-combinators
 
 
 

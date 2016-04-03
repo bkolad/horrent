@@ -7,10 +7,23 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Types as TP
 import qualified Data.Array.MArray as MA
 import qualified Control.Concurrent.STM as STM
-
+import qualified Control.Concurrent as CC
 import Control.Monad.Trans.Class (lift)
+--import Control.Monad.IO.Class
+import qualified System.Timeout as TOUT
 
 import Action
+
+
+
+interpretWithTimeOut :: Int
+     -> TP.GlobalPiceInfo
+     -> TP.SizeInfo
+     -> Sink BC.ByteString IO ()
+     -> Action a
+     -> IO (Maybe a)
+interpretWithTimeOut tout  global sizeInfo peerSink program =
+    TOUT.timeout tout (interpret global sizeInfo peerSink program)
 
 interpret :: TP.GlobalPiceInfo
           -> TP.SizeInfo
@@ -19,12 +32,13 @@ interpret :: TP.GlobalPiceInfo
           -> IO a
 interpret global sizeInfo peerSink program =
     case program of
-        Free (SendInterested c) ->
+        Free (SendInterested c) -> --liftIO $
             do  sendInterested peerSink
                 interpret global sizeInfo peerSink c
 
         Free (Log str c) ->
-            do print ("LOG:: " ++ str)
+            do tID <- CC.myThreadId
+               print ("LOG:: " ++ str ++" "++ (show tID) )
                interpret global sizeInfo peerSink c
 
         Free (ReqNextAndUpdate pieces fun) ->
@@ -45,6 +59,7 @@ interpret global sizeInfo peerSink program =
         Pure x -> return x
 
 
+
 requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)
 requestNextAndUpdateGlobal pics global =
    STM.atomically $ reqNext pics global
@@ -55,6 +70,9 @@ requestNextAndUpdateGlobal pics global =
             do pInfo <- MA.readArray global x -- TODO view pattern
                case pInfo of
                   TP.NotHave -> do
+                     MA.writeArray global x TP.InProgress
+                     return $ Just x
+                  TP.Registered -> do
                      MA.writeArray global x TP.InProgress
                      return $ Just x
                   TP.InProgress -> reqNext xs global

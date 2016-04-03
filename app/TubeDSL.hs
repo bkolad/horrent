@@ -60,8 +60,6 @@ decodeMessage dec = do
                             (\x -> decodeMessage $ fun (Just x))
 
         (G.Done lo _ x) -> do
-            lift $ logF "DECODE DIONE"
-
             yield x
             leftover lo
             (decodeMessage M.getMessage)
@@ -83,6 +81,7 @@ recMessage peer = do
        Just (M.Bitfield b) -> do
             let pList = P.bsToPieceLs b
                 newPeer = peer {P.pieces = pList}
+    --        lift $ mapM (\x -> (setStatusF x TP.Registered)) pList
             lift $ logF "BF"
             lift $ sendInterestedF
 
@@ -93,6 +92,8 @@ recMessage peer = do
             let p = (P.fromBsToInt b)
                 pList = p : P.pieces peer
                 newPeer = peer {P.pieces = pList}
+
+        --    lift $ setStatusF p TP.Registered
 
             lift $ logF ("Have " ++ (show p))
 
@@ -110,8 +111,7 @@ recMessage peer = do
                       lift $ logF ("Req "++(show next))
                       lift $ sendRequestF (next, 0, chunkSize)
                       lift $ setStatusF next TP.InProgress
-                      lift $ logF ("Req NN")
-
+                    
                       recMessage peer
 
 
@@ -122,19 +122,18 @@ recMessage peer = do
                 newPeer = peer {P.buffer = newBuffer}
                 size = getSize idx sizeInfo
 
-            lift $ logF ("GOT Piece " ++ (show idx) ++" "++ (show offset))
-
-            lift $ logF ("Size Info " ++ (show sizeInfo) ++" ")
 
             whatToDo <- handlePiecie sizeInfo (idx,offset) size newPeer
 
             case whatToDo of
                  LastPiece -> do
                             yield (show idx, newBuffer)
+                            lift $ logF ("GOT LAST Piece " ++ (show idx) ++" "++ (show offset))
                             return ()
                  Continue -> recMessage newPeer
                  YieldAndContinue -> do   -- Piece Done
                             yield (show idx, newBuffer)
+                            lift $ logF ("GOT Piece " ++ (show idx) ++" "++ (show offset))
                             let clearPeer = newPeer {P.buffer = BC.empty}
                             recMessage clearPeer
 
@@ -143,8 +142,9 @@ recMessage peer = do
             return ()
 
        Just M.KeepAlive -> do
-            lift $ logF "KeepAlive"
-            recMessage peer
+            return ()
+            --lift $ logF "KeepAlive"
+            --recMessage peer
 
        Just y -> do
             lift $ logF ("This message should not arrive while downloading " ++ (show y))
@@ -162,7 +162,6 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
 
        let newOffset = offset + chunkSize
            reqSize = min sizeLeft chunkSize
-       lift $ logF ((show sizeInfo)++"ReqN "++ (show idx) ++ " " ++ (show newOffset) ++" "++" " ++(show reqSize)++" "++(show (BC.length (P.buffer peer))))
        lift $ sendRequestF (idx, newOffset , reqSize)
 
        return Continue
@@ -172,18 +171,19 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
  | otherwise = do
       let pieces = P.pieces peer
           newBuffer = P.buffer peer
-    --      hshEq = ((Seq.index (P.pieceHashes peer) idx) == P.hashFor newBuffer)
+          hshEq = ((Seq.index (P.pieceHashes peer) idx) == P.hashFor newBuffer)
 
 
 
-      --lift $ logF $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
-      lift $ logF $ ""
+      lift $ logF $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
 
 
       nextM <- lift $ requestNextAndUpdateGlobalF pieces
       case nextM of
             Nothing -> do
                  lift $ logF "EXIT"
+                 lift $ setStatusF idx TP.Done
+
                  return LastPiece
 
             Just next -> do

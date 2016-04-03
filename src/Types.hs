@@ -15,6 +15,7 @@ module Types  ( GlobalPiceInfo
               , LastPieceSize
               , SizeInfo
               , Perhaps
+              , showGlobal
               , getSizeData
               ) where
 
@@ -41,12 +42,17 @@ data SizeInfo = SizeInfo { numberOfPieces :: NumberOfPieces
 type Perhaps a = Either String a
 
 
-data PiceInfo = Done | InProgress | NotHave
+data PiceInfo = Done | InProgress | NotHave | Registered
   deriving (Show, Eq)
 
 type GlobalPiceInfo = TA.TArray Int PiceInfo
+--    deriving Show
 
 type HashInfo = Seq.Seq BC.ByteString
+
+showGlobal :: GlobalPiceInfo -> IO ([(Int, PiceInfo)])
+showGlobal global = atomically $ getAssocs global
+
 
 
 hashInfoFromList :: [BC.ByteString] -> HashInfo
