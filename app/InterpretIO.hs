@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module InterpretIO where
 
 import Data.Conduit
@@ -14,6 +15,8 @@ import qualified System.Timeout as TOUT
 import qualified Data.Streaming.Network as SN
 import qualified Data.Conduit.Binary as CB
 import qualified Control.Monad.Trans.Resource as R
+import Control.Exception
+
 
 
 
@@ -33,6 +36,7 @@ interpret appData global sizeInfo peerSink mPending program =
     case program of
         Free (SendInterested c) -> --liftIO $
             do  sendInterested peerSink
+
                 interpret appData global sizeInfo peerSink mPending c
 
         Free (Log str c) ->
@@ -50,15 +54,29 @@ interpret appData global sizeInfo peerSink mPending program =
                interpret appData global sizeInfo peerSink (Just pending) c
 
         Free (SetStatus x status c) ->
-            do setStatus x global status
+            do
+               let exception = (TP.PeerException "" (Just x))
+
+               catch (setStatus x global status)
+                     (\(e :: SomeException) -> throw exception)
+
+
                interpret appData global sizeInfo peerSink mPending c
 
         Free (ReqSizeInfo fun) ->
             interpret appData global sizeInfo peerSink mPending (fun sizeInfo)
 
         Free (ReadData fun) ->
-            do m <- TOUT.timeout (2*1000000) (SN.appRead appData)
-               interpret appData global sizeInfo peerSink mPending (fun m)
+            do
+               let exception = (TP.PeerException "" mPending)
+               m <- catch
+                    (TOUT.timeout (2*1000000) (SN.appRead appData))
+                    (\(e :: SomeException) -> throw exception)
+
+               case m of
+                   Nothing -> throw exception
+                   Just d ->
+                    interpret appData global sizeInfo peerSink mPending (fun d)
 
         Free (SaveToFile fN content c) ->
            do R.runResourceT $ (yield content) $$ (CB.sinkFile ("downloads/" ++ fN))
@@ -66,6 +84,9 @@ interpret appData global sizeInfo peerSink mPending program =
 
         Free (GetPendingPiece fun) ->
                interpret appData global sizeInfo peerSink mPending (fun mPending)
+
+        --Free (UnChoke c) ->
+        --      interpret appData global sizeInfo peerSink mPending c
 
         Pure x -> return x
 
@@ -86,7 +107,7 @@ requestNextAndUpdateGlobal pics global =
                   TP.Registered -> do
                      MA.writeArray global x TP.InProgress
                      return $ Just x
-                  TP.TimeOut k -> do
+                  TP.TimeOut  -> do
                      MA.writeArray global x TP.InProgress
                      return $ Just x
                   TP.InProgress -> reqNext xs global

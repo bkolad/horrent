@@ -37,33 +37,28 @@ readFromQueue (SQueue queue) = STM.atomically $ TQ.tryReadTQueue queue
 
 
 
-spawnNThreadsAndWait :: Int -> IO () -> IO ()
+spawnNThreadsAndWait :: Int -> IO b -> IO [b]
 spawnNThreadsAndWait n action =
      do x <- replicateM n (async action)
         mapM wait x
-        return ()
+        --return ()
 
 
 tOut = 45*60 * 1000000
 
-loop :: Show a => SQueue a -> (a -> IO ())-> IO ()
-loop queue action =
+loop :: Show a => SQueue a -> (a -> IO b)-> [b]-> IO [b]
+loop queue action acc =
      do x <- readFromQueue queue
         case x of
              Just k -> do
-            {--     catch ({--timeout tOut --} (action  k)) (\e -> do
-                     let err = show (e :: SomeException)
-                     (print "BUUU")
-                     return ())
---}
+                 x <- (action  k)
+                 loop queue action (x:acc)
 
-                 (action  k)
-                 loop queue action
-             Nothing -> return()
+             Nothing -> return acc
 
 
 
-
+{--
 doIO x = do tI <- myThreadId
             threadDelay 100000
             print $ (show x) ++"  "++ (show tI)
@@ -72,3 +67,4 @@ doIO x = do tI <- myThreadId
 tryQueue = do q2 <- makeQueueFromList ([1, 2 .. 10] )
               print "Queue"
               spawnNThreadsAndWait 1 (loop q2 doIO)
+--}

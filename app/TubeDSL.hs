@@ -127,11 +127,13 @@ recMessage peer = do
 
             case whatToDo of
                  LastPiece -> do
+                    --        lift $ setStatusF idx TP.Done
                             yield (show idx, newBuffer)
                             lift $ logF ("GOT LAST Piece " ++ (show idx) ++" "++ (show offset))
                             return ()
                  Continue -> recMessage newPeer
                  YieldAndContinue -> do   -- Piece Done
+                            lift $ setStatusF idx TP.Done
                             yield (show idx, newBuffer)
                             lift $ logF ("GOT Piece " ++ (show idx) ++" "++ (show offset))
                             let clearPeer = newPeer {P.buffer = BC.empty}
@@ -139,16 +141,32 @@ recMessage peer = do
 
 
        Just M.Choke ->
-            return ()
+        --    lift $ logF "Chocke"
+        --    lift $ unChokeF
+
+    --        recMessage peer
+        do
+            p <- lift getPendingPieceF
+            case p of
+                Nothing -> return ()
+                Just x -> do
+                    lift $ setStatusF x TP.NotHave
+                    return ()
 
        Just M.KeepAlive -> do
-            return ()
-            --lift $ logF "KeepAlive"
-            --recMessage peer
+            --return ()
+            lift $ logF "KeepAlive"
+            recMessage peer
 
        Just y -> do
             lift $ logF ("This message should not arrive while downloading " ++ (show y))
-            return ()
+            p <- lift getPendingPieceF
+            case p of
+                Nothing -> return ()
+                Just x -> do
+                    lift $ setStatusF x TP.NotHave
+                    return ()
+
 
 
 handlePiecie ::
@@ -192,7 +210,7 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
 
                  lift $ sendRequestF (next, 0 , reqSize next sizeInfo)
                  lift $ setStatusF next TP.InProgress
-           
+
                  return YieldAndContinue
 
       where

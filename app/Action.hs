@@ -26,9 +26,10 @@ data ActionF a = SendInterested a
                 | SendRequest (Int, Int, Int) a
                 | SetStatus Int TP.PiceInfo a
                 | ReqSizeInfo (TP.SizeInfo -> a)
-                | ReadData ((Maybe B.ByteString) -> a)
+                | ReadData (B.ByteString -> a)
                 | SaveToFile String B.ByteString a
                 | GetPendingPiece ((Maybe Int) -> a)
+                | UnChoke a
                 deriving (Functor)
 
 
@@ -58,7 +59,7 @@ setStatusF x status = Free $ SetStatus x status (Pure ())
 getSizeInfoF :: Action TP.SizeInfo
 getSizeInfoF = Free $ ReqSizeInfo Pure
 
-readDataWithTimeoutF :: Action (Maybe B.ByteString)
+readDataWithTimeoutF :: Action B.ByteString
 readDataWithTimeoutF = Free $ ReadData Pure
 
 saveToFileF :: String -> B.ByteString -> Action ()
@@ -67,6 +68,8 @@ saveToFileF fN c = Free $ SaveToFile fN c (Pure ())
 getPendingPieceF :: Action (Maybe Int)
 getPendingPieceF = Free $ GetPendingPiece Pure
 
+unChokeF :: Action ()
+unChokeF = Free $ UnChoke (Pure ())
 
 --registerLsF :: [Int] -> Action ()
 --registerLsF ls = Free $ Ragister ls (Pure ())

@@ -11,6 +11,7 @@ import qualified Data.ByteString as B
 import qualified Types as TP
 import qualified Data.Map as Map
 import qualified Data.List as L
+import qualified Data.Sequence as S
 import Action
 
 
@@ -19,6 +20,7 @@ data ActionST = ActionST { logS :: [String]
                          , sendInterested :: Bool
                          , sendReqLog :: Maybe (Int,Int,Int)
                          , setStatus :: [(Int, TP.PiceInfo)]
+                         , global :: S.Seq TP.PiceInfo
                          } deriving Show
 
 
@@ -32,7 +34,7 @@ type Kk m = T (Sink (String, BC.ByteString) m) Int --}
 
 interpret :: (MonadReader (Map.Map Int B.ByteString) m
              ,MonadState ActionST m)
-          => TP.SizeInfo -> Action a -> m a
+          =>  TP.SizeInfo -> Action a -> m a
 interpret sizeInfo program =
     case program of
         Free (SendInterested c) -> do
@@ -60,7 +62,10 @@ interpret sizeInfo program =
             modify (\st -> st {sendReqLog = Just r})
             interpret sizeInfo c
 
-        Free (SetStatus x status c) -> interpret sizeInfo c
+        Free (SetStatus x status c) ->
+            do  
+                modify (\st -> st {global = S.update x status (global st)})
+                interpret sizeInfo c
 
         Free (ReqSizeInfo fun) ->
             interpret sizeInfo (fun sizeInfo)

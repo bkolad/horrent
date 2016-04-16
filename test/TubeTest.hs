@@ -10,30 +10,24 @@ import qualified Test.Tasty.HUnit as THU
 import qualified Test.Tasty.QuickCheck as QC
 import Control.Applicative
 import Test.Tasty
+import qualified Data.Sequence as S
 
 
 
 
---2593,1573
+
 
 pSizeG = 2593--3*16384
 
 fileG = BC.pack (concat $ map show [0.. 1573])
 
 
-checkIfCorrect =
-    let pieces =  fst $ S.runSimulation pSizeG fileG
-        cont = L.foldl' (\acc (x, b) -> B.append acc b) B.empty pieces
-    in cont == fileG
-
-
--- (49827,44663)
-
 recFile (pieceSize, fileLS) =
     let file = BC.pack (concat $ map show [0.. fileLS])
-        pieces =  fst $ S.runSimulation pieceSize file
+        (pieces, state) =  S.runSimulation pieceSize file
+        gl = S.findIndicesL (\a-> a /= TP.Done) (IPST.global state)
         cont = L.foldl' (\acc (x, b) -> B.append acc b) B.empty pieces
-    in  cont == file
+    in  (cont == file) && (gl == [])
 
 pSizeGen :: QC.Gen Int
 pSizeGen = QC.elements [100.. 1000]

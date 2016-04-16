@@ -27,6 +27,6 @@ files = do allF <- getDirectoryContents "downloads/"
            let sortedFiles = sortOn (read :: String -> Int) $ filter isInteger allF
            print sortedFiles
            print $ ((map show [0.. 2247]) L.\\ sortedFiles)
-    --       M.mapM app sortedFiles
+           M.mapM app sortedFiles
 
 main = app "ub.torrent"

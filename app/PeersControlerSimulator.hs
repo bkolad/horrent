@@ -20,6 +20,8 @@ import qualified Types as TP
 import qualified Peer as P
 import qualified Data.Map as Map
 import qualified Data.List as L
+import qualified Data.Sequence as S
+
 
 
 
@@ -35,18 +37,6 @@ checkIfCorrect =
 
 
 
---infoSize = TP.getSizeData (BC.length fileG) pSizeG
-
-{--
-
-
-pSize = 44180--49152
-
-file = BC.pack (concat $ map show [0.. 44180]) --100000])
-
-infoSize = TP.getSizeData (BC.length file) pSize
---}
-
 
 
 runSimulation :: Int
@@ -55,14 +45,17 @@ runSimulation :: Int
 runSimulation pieceSize file =
     let env = splitBs pieceSize 0 Map.empty file
         infoSize = TP.getSizeData (BC.length file) pieceSize
+        startState = IPST.ActionST { IPST.logS = []
+                                   , IPST.reqNextLog = []
+                                   , IPST.sendInterested = False
+                                   , IPST.sendReqLog = Nothing
+                                   , IPST.setStatus = []
+                                   , IPST.global = S.replicate (TP.numberOfPieces infoSize) TP.NotHave
+                                   }
+
     in runReader (runStateT (testTube infoSize) startState) env
 
-{--
 
-checkIfCorrect =
-    let pieces =  fst $ runSimulation pSize file
-        cont = L.foldl' (\acc (x, b) -> B.append acc b) B.empty pieces
-    in cont == file --}
 
 initPeer = P.Peer { P.hostName  = "Some NAme"
                   , P.port = 22
@@ -73,12 +66,6 @@ initPeer = P.Peer { P.hostName  = "Some NAme"
                   , P.pieceHashes  = error "no p hashes"
                   }
 
-startState = IPST.ActionST { IPST.logS = []
-                           , IPST.reqNextLog = []
-                           , IPST.sendInterested = False
-                           , IPST.sendReqLog = Nothing
-                           , IPST.setStatus = []
-                           }
 
 
 

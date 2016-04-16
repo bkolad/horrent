@@ -4,6 +4,8 @@ module Types  ( GlobalPiceInfo
               , newGlobalBitField
               , PiceInfo (..)
               , SizeInfo (..)
+            --  , PeerStatus (..)
+              , PeerException (..)
               , HashInfo
               , liftEither
               , ExceptT
@@ -13,7 +15,6 @@ module Types  ( GlobalPiceInfo
               , NumberOfPieces
               , NormalPieceSize
               , LastPieceSize
-              , SizeInfo
               , Perhaps
               , showGlobal
               , getSizeData
@@ -21,14 +22,24 @@ module Types  ( GlobalPiceInfo
 
 
 import qualified Control.Concurrent.STM.TArray as TA
-import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString as B
+
 import qualified Data.Sequence as Seq
 import Control.Concurrent.STM
 import Data.Array.MArray
 import Control.Monad.Trans.Except
 import Control.Monad.IO.Class (liftIO)
 import qualified Network as N
+import Control.Exception
 
+
+
+data PeerException = PeerException N.HostName (Maybe Int)
+    --deriving Typeable
+instance Show PeerException where
+    show (PeerException n i) = "Peer Exception " ++ n ++ " "++ (show i)
+
+instance Exception PeerException
 
 
 
@@ -43,26 +54,39 @@ data SizeInfo = SizeInfo { numberOfPieces :: NumberOfPieces
 
 type Perhaps a = Either String a
 
+{--
+data PeerStatus a = PeerOK a
+                  | PeerTimeOut N.HostName
+                  | PeerError N.HostName
 
-data PiceInfo = Done | InProgress | NotHave | Registered | TimeOut N.HostName
+--}
+data PiceInfo = Done
+              | InProgress
+              | NotHave
+              | Registered
+              | TimeOut --N.HostName
   deriving (Show, Eq)
 
 type GlobalPiceInfo = TA.TArray Int PiceInfo
 --    deriving Show
 
-type HashInfo = Seq.Seq BC.ByteString
+type HashInfo = Seq.Seq B.ByteString
 
 showGlobal :: GlobalPiceInfo -> IO ([(Int, PiceInfo)])
 showGlobal global = atomically $ getAssocs global
 
 
 
-hashInfoFromList :: [BC.ByteString] -> HashInfo
+hashInfoFromList :: [B.ByteString] -> HashInfo
 hashInfoFromList = Seq.fromList
 
 
-newGlobalBitField ::Int-> IO GlobalPiceInfo
+newGlobalBitField ::Int -> IO GlobalPiceInfo
 newGlobalBitField size = atomically $ newArray (0, size-1) NotHave
+
+
+
+
 
 liftEither :: Either e a -> ExceptT e IO a
 liftEither = ExceptT . return
