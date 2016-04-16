@@ -1,5 +1,7 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-module InterpretIO where
+{-# LANGUAGE ScopedTypeVariables, FlexibleContexts #-}
+module InterpretIO ( InterpreterEnv (..)
+                   , interpret
+                   ) where
 
 import Data.Conduit
 import qualified Data.Conduit.List as CL
@@ -18,75 +20,82 @@ import qualified Control.Monad.Trans.Resource as R
 import Control.Exception
 
 
-
+import Control.Monad.IO.Class
+import Control.Monad.Reader
 
 
 import Action
 
+data InterpreterEnv =
+    InterpreterEnv { appData  :: SN.AppData
+                   , global   :: TP.GlobalPiceInfo
+                   , sizeInfo :: TP.SizeInfo
+                   , peerSink :: Sink BC.ByteString IO ()
+                   , pending  :: Maybe Int
+                   }
 
-
-interpret :: SN.AppData
-          -> TP.GlobalPiceInfo
-          -> TP.SizeInfo
-          -> Sink BC.ByteString IO ()
-          -> Maybe Int
-          -> Action a
-          -> IO a
-interpret appData global sizeInfo peerSink mPending program =
+interpret :: Action a
+          -> ReaderT InterpreterEnv IO a
+interpret program =
     case program of
-        Free (SendInterested c) -> --liftIO $
-            do  sendInterested peerSink
-
-                interpret appData global sizeInfo peerSink mPending c
+        Free (SendInterested c) ->
+            do pSink <- peerSink <$> ask
+               liftIO $ sendInterested pSink
+               interpret c
 
         Free (Log str c) ->
-            do tID <- CC.myThreadId
-               print ("LOG:: " ++ str ++" "++ (show tID) )
-               interpret appData global sizeInfo peerSink mPending c
+            do tID <- liftIO CC.myThreadId
+               liftIO $ print ("LOG:: " ++ str ++" "++ (show tID) )
+               interpret c
 
         Free (ReqNextAndUpdate pieces fun) ->
-            do m <-requestNextAndUpdateGlobal pieces global
-               interpret appData global sizeInfo peerSink mPending (fun m)
+            do gl <- global <$> ask
+               next <- liftIO $ requestNextAndUpdateGlobal pieces gl
+               interpret $ fun next
 
         Free (SendRequest req c) ->
-            do sendRequest peerSink req
-               let (pending, _, _) = req
-               interpret appData global sizeInfo peerSink (Just pending) c
+            do pSink <- peerSink <$> ask
+               let (pend, _, _) = req
+                   exception = (TP.PeerException "" (Just pend))
+               m <- liftIO $ catch
+                    (sendRequest pSink req)
+                    (\(e :: SomeException) -> throw exception)
+
+
+               local ( \ env -> env {pending = (Just pend)}) (interpret c)
+
 
         Free (SetStatus x status c) ->
-            do
-               let exception = (TP.PeerException "" (Just x))
-
-               catch (setStatus x global status)
-                     (\(e :: SomeException) -> throw exception)
-
-
-               interpret appData global sizeInfo peerSink mPending c
+            do gl <- global <$> ask
+               liftIO $ (setStatus x gl status)
+               interpret c
 
         Free (ReqSizeInfo fun) ->
-            interpret appData global sizeInfo peerSink mPending (fun sizeInfo)
+            do sInfo <- sizeInfo <$> ask
+               interpret $ fun sInfo
 
-        Free (ReadData fun) ->
+
+        Free (ReadData t fun) ->
             do
+               mPending <- pending <$> ask
+               aData <- appData <$> ask
                let exception = (TP.PeerException "" mPending)
-               m <- catch
-                    (TOUT.timeout (2*1000000) (SN.appRead appData))
+               m <- liftIO $ catch
+                    (TOUT.timeout t (SN.appRead aData))
                     (\(e :: SomeException) -> throw exception)
 
                case m of
                    Nothing -> throw exception
-                   Just d ->
-                    interpret appData global sizeInfo peerSink mPending (fun d)
+                   Just d -> interpret (fun d)
+
 
         Free (SaveToFile fN content c) ->
-           do R.runResourceT $ (yield content) $$ (CB.sinkFile ("downloads/" ++ fN))
-              interpret appData global sizeInfo peerSink mPending c
+           do liftIO $ R.runResourceT $ (yield content) $$ (CB.sinkFile ("downloads/" ++ fN))
+              interpret c
 
         Free (GetPendingPiece fun) ->
-               interpret appData global sizeInfo peerSink mPending (fun mPending)
-
-        --Free (UnChoke c) ->
-        --      interpret appData global sizeInfo peerSink mPending c
+            do mPending <- pending <$> ask
+               interpret (fun mPending)
 
         Pure x -> return x
 

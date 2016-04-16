@@ -52,12 +52,18 @@ decodeMessage :: G.Decoder M.Message
 decodeMessage dec = do
 
     case dec of
-        (G.Fail _ _ _) ->
+        (G.Fail _ _ _) -> do
             lift $ logF "ERROR: DECODING FAILURE"
+            lift resetPieceStatus
 
-        G.Partial fun ->
-            await >>= maybe (return ())
-                            (\x -> decodeMessage $ fun (Just x))
+        G.Partial fun -> do
+    --        await >>= maybe (return ())
+    --                        (\x -> decodeMessage $ fun (Just x))
+
+            mx <- await
+            case mx of
+                Nothing -> lift resetPieceStatus
+                Just x ->  decodeMessage $ fun (Just x)
 
         (G.Done lo _ x) -> do
             yield x
@@ -75,13 +81,13 @@ recMessage peer = do
 
   case message of
        Nothing -> do
+            lift $ logF "EXIT ON NOTHING"
             return ()
 
 
        Just (M.Bitfield b) -> do
             let pList = P.bsToPieceLs b
                 newPeer = peer {P.pieces = pList}
-    --        lift $ mapM (\x -> (setStatusF x TP.Registered)) pList
             lift $ logF "BF"
             lift $ sendInterestedF
 
@@ -93,8 +99,6 @@ recMessage peer = do
                 pList = p : P.pieces peer
                 newPeer = peer {P.pieces = pList}
 
-        --    lift $ setStatusF p TP.Registered
-
             lift $ logF ("Have " ++ (show p))
 
             recMessage newPeer
@@ -104,7 +108,8 @@ recMessage peer = do
             lift $  logF "UnChoke"
             nextM <- lift $ requestNextAndUpdateGlobalF pieces
             case nextM of
-                 Nothing ->
+                 Nothing -> do
+                      lift $ logF "EXIT UNCHOKE"
                       return ()
 
                  Just next -> do
@@ -131,6 +136,7 @@ recMessage peer = do
                             yield (show idx, newBuffer)
                             lift $ logF ("GOT LAST Piece " ++ (show idx) ++" "++ (show offset))
                             return ()
+
                  Continue -> recMessage newPeer
                  YieldAndContinue -> do   -- Piece Done
                             lift $ setStatusF idx TP.Done
@@ -141,17 +147,9 @@ recMessage peer = do
 
 
        Just M.Choke ->
-        --    lift $ logF "Chocke"
-        --    lift $ unChokeF
-
-    --        recMessage peer
         do
             p <- lift getPendingPieceF
-            case p of
-                Nothing -> return ()
-                Just x -> do
-                    lift $ setStatusF x TP.NotHave
-                    return ()
+            lift resetPieceStatus
 
        Just M.KeepAlive -> do
             --return ()
@@ -160,12 +158,17 @@ recMessage peer = do
 
        Just y -> do
             lift $ logF ("This message should not arrive while downloading " ++ (show y))
-            p <- lift getPendingPieceF
-            case p of
-                Nothing -> return ()
-                Just x -> do
-                    lift $ setStatusF x TP.NotHave
-                    return ()
+            lift resetPieceStatus
+
+--resetPieceStatus :: Action (String, BC.ByteString)
+resetPieceStatus = do
+    p <- getPendingPieceF
+    case p of
+        Nothing ->
+            return ()
+        Just x -> do
+            setStatusF x TP.NotHave
+            return ()
 
 
 
@@ -194,19 +197,18 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
 
 
       lift $ logF $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
+      lift $ setStatusF idx TP.Done
 
 
       nextM <- lift $ requestNextAndUpdateGlobalF pieces
       case nextM of
             Nothing -> do
                  lift $ logF "EXIT"
-                 lift $ setStatusF idx TP.Done
 
                  return LastPiece
 
             Just next -> do
                  lift $ logF ("Next " ++ (show next))
-                 lift $ setStatusF idx TP.Done
 
                  lift $ sendRequestF (next, 0 , reqSize next sizeInfo)
                  lift $ setStatusF next TP.InProgress

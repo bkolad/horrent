@@ -29,6 +29,7 @@ import Control.Exception
 import qualified Data.Array.MArray as MA
 import qualified Control.Concurrent.STM as STM
 
+import Control.Monad.Reader
 
 
 
@@ -109,9 +110,14 @@ runClient globalStatus sizeInfo peer =
         T.sendHandshake infoHash peerSink
 
         let action = (tube peer source)
-            run = (IPIO.interpret appData globalStatus sizeInfo peerSink Nothing)
+            env = IPIO.InterpreterEnv { IPIO.appData  = appData
+                                      , IPIO.global   = globalStatus
+                                      , IPIO.sizeInfo = sizeInfo
+                                      , IPIO.peerSink = peerSink
+                                      , IPIO.pending  = Nothing
+                                      }
 
-        run action
+        runReaderT (IPIO.interpret action) env
 
 
 setStatusTimetOut :: Int -> TP.GlobalPiceInfo -> IO()
@@ -141,7 +147,7 @@ appSource :: Producer Action B.ByteString
 appSource =
     loop
   where
-    read' = readDataWithTimeoutF
+    read' = readDataWithTimeoutF (2000000)
     loop = do
         bs <- lift read'
         unless (B.null bs) $ do
