@@ -48,21 +48,19 @@ recHandshake =
 
 
 decodeMessage :: G.Decoder M.Message
-              -> Conduit BC.ByteString Action M.Message
+              -> Conduit B.ByteString Action M.Message
 decodeMessage dec = do
 
     case dec of
         (G.Fail _ _ _) -> do
             lift $ logF "ERROR: DECODING FAILURE"
-            lift resetPieceStatus
+            lift $ throwF TP.PacketParseException
 
         G.Partial fun -> do
-    --        await >>= maybe (return ())
-    --                        (\x -> decodeMessage $ fun (Just x))
 
             mx <- await
             case mx of
-                Nothing -> lift resetPieceStatus
+                Nothing -> lift $ throwF TP.NetworkException
                 Just x ->  decodeMessage $ fun (Just x)
 
         (G.Done lo _ x) -> do
@@ -128,7 +126,7 @@ recMessage peer = do
                 size = getSize idx sizeInfo
 
 
-            whatToDo <- handlePiecie sizeInfo (idx,offset) size newPeer
+            whatToDo <- lift $ handlePiecie sizeInfo (idx,offset) size newPeer
 
             case whatToDo of
                  LastPiece -> do
@@ -147,29 +145,15 @@ recMessage peer = do
 
 
        Just M.Choke ->
-        do
-            p <- lift getPendingPieceF
-            lift resetPieceStatus
+            lift $ throwF TP.ChokeException
 
        Just M.KeepAlive -> do
-            --return ()
             lift $ logF "KeepAlive"
             recMessage peer
 
        Just y -> do
             lift $ logF ("This message should not arrive while downloading " ++ (show y))
-            lift resetPieceStatus
-
---resetPieceStatus :: Action (String, BC.ByteString)
-resetPieceStatus = do
-    p <- getPendingPieceF
-    case p of
-        Nothing ->
-            return ()
-        Just x -> do
-            setStatusF x TP.NotHave
-            return ()
-
+            lift $ throwF TP.MsgNotSupportedException
 
 
 handlePiecie ::
@@ -177,13 +161,13 @@ handlePiecie ::
    -> (Int, Int)
    -> Int
    -> P.Peer
-   -> ConduitM M.Message (String, BC.ByteString) Action Exec
+   -> Action Exec
 handlePiecie sizeInfo (idx, offset) pieceSize peer
   | (offset < sizeLeft) = do
 
        let newOffset = offset + chunkSize
            reqSize = min sizeLeft chunkSize
-       lift $ sendRequestF (idx, newOffset , reqSize)
+       sendRequestF (idx, newOffset , reqSize)
 
        return Continue
 
@@ -196,22 +180,22 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
 
 
 
-      lift $ logF $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
-      lift $ setStatusF idx TP.Done
+      logF $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
+      setStatusF idx TP.Done
 
 
-      nextM <- lift $ requestNextAndUpdateGlobalF pieces
+      nextM <- requestNextAndUpdateGlobalF pieces
       case nextM of
             Nothing -> do
-                 lift $ logF "EXIT"
+                 logF "EXIT"
 
                  return LastPiece
 
             Just next -> do
-                 lift $ logF ("Next " ++ (show next))
+                 logF ("Next " ++ (show next))
 
-                 lift $ sendRequestF (next, 0 , reqSize next sizeInfo)
-                 lift $ setStatusF next TP.InProgress
+                 sendRequestF (next, 0 , reqSize next sizeInfo)
+                 setStatusF next TP.InProgress
 
                  return YieldAndContinue
 

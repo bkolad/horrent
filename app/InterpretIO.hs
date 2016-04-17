@@ -56,7 +56,7 @@ interpret program =
         Free (SendRequest req c) ->
             do pSink <- peerSink <$> ask
                let (pend, _, _) = req
-                   exception = (TP.PeerException "" (Just pend))
+                   exception = (TP.PeerException TP.NetworkException "" (Just pend))
                m <- liftIO $ catch
                     (sendRequest pSink req)
                     (\(e :: SomeException) -> throw exception)
@@ -79,13 +79,13 @@ interpret program =
             do
                mPending <- pending <$> ask
                aData <- appData <$> ask
-               let exception = (TP.PeerException "" mPending)
+               let exception = (TP.PeerException TP.NetworkException "" mPending)
                m <- liftIO $ catch
                     (TOUT.timeout t (SN.appRead aData))
                     (\(e :: SomeException) -> throw exception)
 
                case m of
-                   Nothing -> throw exception
+                   Nothing -> throw (TP.PeerException TP.TimeOutException "" mPending)
                    Just d -> interpret (fun d)
 
 
@@ -96,6 +96,11 @@ interpret program =
         Free (GetPendingPiece fun) ->
             do mPending <- pending <$> ask
                interpret (fun mPending)
+
+        Free (Throw ex c) ->
+               do mPending <- pending <$> ask
+                  liftIO $ throw ( TP.PeerException ex "" mPending)
+
 
         Pure x -> return x
 

@@ -10,6 +10,7 @@ module Action ( ActionF (..)
               , readDataWithTimeoutF
               , saveToFileF
               , getPendingPieceF
+              , throwF
             --  , registerLsF
               , Action
               , Free(Free,Pure)
@@ -18,6 +19,7 @@ module Action ( ActionF (..)
 import Control.Monad.Free (Free(Free,Pure))
 import qualified Types as TP
 import qualified Data.ByteString as B
+
 
 
 data ActionF a = SendInterested a
@@ -30,6 +32,7 @@ data ActionF a = SendInterested a
                 | SaveToFile String B.ByteString a
                 | GetPendingPiece ((Maybe Int) -> a)
                 | UnChoke a
+                | Throw TP.ExeptionType a
                 deriving (Functor)
 
 
@@ -43,8 +46,7 @@ logF :: String -> Action ()
 logF str = Free $ Log str (Pure ())
 
 
-requestNextAndUpdateGlobalF :: [Int]
-                            -> Action (Maybe Int)
+requestNextAndUpdateGlobalF :: [Int] -> Action (Maybe Int)
 requestNextAndUpdateGlobalF pieces =
     Free $ ReqNextAndUpdate pieces Pure
 
@@ -70,6 +72,10 @@ getPendingPieceF = Free $ GetPendingPiece Pure
 
 unChokeF :: Action ()
 unChokeF = Free $ UnChoke (Pure ())
+
+throwF ::TP.ExeptionType ->  Action ()
+throwF x = Free $ Throw x (Pure ())
+
 
 --registerLsF :: [Int] -> Action ()
 --registerLsF ls = Free $ Ragister ls (Pure ())

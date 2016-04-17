@@ -6,6 +6,7 @@ module Types  ( GlobalPiceInfo
               , SizeInfo (..)
             --  , PeerStatus (..)
               , PeerException (..)
+              , ExeptionType (..)
               , HashInfo
               , liftEither
               , ExceptT
@@ -34,10 +35,22 @@ import Control.Exception
 
 
 
-data PeerException = PeerException N.HostName (Maybe Int)
+
+
+data PeerException = PeerException ExeptionType N.HostName (Maybe Int)
+
+data ExeptionType = TimeOutException
+                   | NetworkException
+                   | NoDataException
+                   | PacketParseException
+                   | MsgNotSupportedException
+                   | ChokeException
+                   deriving Show
     --deriving Typeable
+
+
 instance Show PeerException where
-    show (PeerException n i) = "Peer Exception " ++ n ++ " "++ (show i)
+    show (PeerException e n i) = "Peer Exception "++(show e)++ " "++ n ++ " "++ (show i)
 
 instance Exception PeerException
 

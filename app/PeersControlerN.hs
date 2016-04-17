@@ -45,7 +45,7 @@ startM tracker =
         liftIO $ print (length peers)
         liftIO $ threadDelay 1000
         qu                 <- liftIO $ SQ.makeQueueFromList peers-- (take 10 peers)
-        lStat <- liftIO $ SQ.spawnNThreadsAndWait 20 (SQ.loop qu (runClientSafeSSS globalStatus sizeInfo) [])
+        lStat <- liftIO $ SQ.spawnNThreadsAndWait 20 (SQ.loop qu (runClientSafe globalStatus sizeInfo) [])
         liftIO $ print (show (filter (\s -> s /= OK) $ M.join lStat))
 
         es                 <- liftIO $  (TP.showGlobal globalStatus)
@@ -79,23 +79,30 @@ changeStatus (Error n i) global = return ()
 data PeerStatus = OK | Error String Int
     deriving (Show, Eq)
 
-runClientSafeSSS ::  TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO PeerStatus
-runClientSafeSSS globalStatus sizeInfo peer = do
-    catch (runClientSafe globalStatus sizeInfo peer)
-          (\(e :: SomeException) -> do print "!!!!!!!!!!!!!!!!!!!!!!"
-                                       return $ Error (P.hostName peer) (-999))
-
 
 runClientSafe ::  TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO PeerStatus
 runClientSafe globalStatus sizeInfo peer = do
     let rr = (\ _ -> OK) <$> (runClient globalStatus sizeInfo peer)
-    catch rr
-          (\(TP.PeerException n iM) ->
-          case iM of
-             Nothing -> return $ Error (P.hostName peer) 99999
-             Just i -> do setStatusTimetOut i globalStatus
-                          return $ Error (P.hostName peer) i)
+    catches rr
+          [ Handler (handleTubeException globalStatus)
+          ,
 
+          Handler (\ (SomeException ex) ->
+              return $ Error ((P.hostName peer)++" "++show ex) (-999))
+
+
+          ]
+
+
+handleTubeException global (TP.PeerException e n iM)  =
+        case iM of
+            Nothing -> return (Error "" (-11))
+            Just x -> do setStatusNotHave x global
+                         return (Error "" x)
+
+setStatusNotHave :: Int -> TP.GlobalPiceInfo -> IO()
+setStatusNotHave x global =
+    STM.atomically $ MA.writeArray global x TP.NotHave
 
 
 runClient :: TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO ()
