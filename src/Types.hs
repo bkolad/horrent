@@ -67,12 +67,7 @@ data SizeInfo = SizeInfo { numberOfPieces :: NumberOfPieces
 
 type Perhaps a = Either String a
 
-{--
-data PeerStatus a = PeerOK a
-                  | PeerTimeOut N.HostName
-                  | PeerError N.HostName
 
---}
 data PiceInfo = Done
               | InProgress
               | NotHave

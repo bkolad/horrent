@@ -53,26 +53,6 @@ startM tracker =
         return ()
 
 
-start :: [P.Peer] -> TP.SizeInfo -> [PeerStatus] -> IO [PeerStatus]
-start peers sizeInfo ps = do
-
-    globalStatus <- liftIO $ TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
-    qu           <- liftIO $ SQ.makeQueueFromList peers-- (take 10 peers)
-    lStat <- liftIO $ SQ.spawnNThreadsAndWait 20 (SQ.loop qu (runClientSafe globalStatus sizeInfo) [])
-    return $ M.join lStat
-
-
-makeGlobal :: [PeerStatus] -> TP.SizeInfo-> IO TP.GlobalPiceInfo
-makeGlobal ps sizeInfo =
-    do globalStatus <- liftIO $ TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
-     --  mapM_ ()
-       return globalStatus
-
-
-changeStatus :: PeerStatus -> TP.GlobalPiceInfo -> IO ()
-changeStatus OK _ = return ()
-changeStatus (Error n i) global = return ()
-
 
 
 
@@ -94,15 +74,20 @@ runClientSafe globalStatus sizeInfo peer = do
           ]
 
 
-handleTubeException global (TP.PeerException e n iM)  =
+handleTubeException global (TP.PeerException e host iM)  =
         case iM of
-            Nothing -> return (Error "" (-11))
+            Nothing -> return (Error host (-11))
             Just x -> do setStatusNotHave x global
-                         return (Error "" x)
+                         return (Error host x)
+
+
 
 setStatusNotHave :: Int -> TP.GlobalPiceInfo -> IO()
 setStatusNotHave x global =
     STM.atomically $ MA.writeArray global x TP.NotHave
+
+
+
 
 
 runClient :: TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO ()
@@ -122,6 +107,7 @@ runClient globalStatus sizeInfo peer =
                                       , IPIO.sizeInfo = sizeInfo
                                       , IPIO.peerSink = peerSink
                                       , IPIO.pending  = Nothing
+                                      , IPIO.host     = (P.hostName peer)
                                       }
 
         runReaderT (IPIO.interpret action) env
@@ -168,4 +154,4 @@ saveToFile = do
   awaitForever (lift . save)
   where
     save ::  (String, BC.ByteString) -> Action ()
-    save (fN, c) = saveToFileF fN c
+    save (fN, c) = saveToFileF ("downloads/" ++fN) c

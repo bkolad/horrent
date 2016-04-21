@@ -32,6 +32,7 @@ data InterpreterEnv =
                    , sizeInfo :: TP.SizeInfo
                    , peerSink :: Sink BC.ByteString IO ()
                    , pending  :: Maybe Int
+                   , host     :: String
                    }
 
 interpret :: Action a
@@ -55,12 +56,13 @@ interpret program =
 
         Free (SendRequest req c) ->
             do pSink <- peerSink <$> ask
+               hostName <- host <$> ask
                let (pend, _, _) = req
-                   exception = (TP.PeerException TP.NetworkException "" (Just pend))
-               m <- liftIO $ catch
-                    (sendRequest pSink req)
-                    (\(e :: SomeException) -> throw exception)
+                   exception =
+                        makeException TP.NetworkException hostName (Just pend)
 
+               liftIO $ catch (sendRequest pSink req)
+                              (\(e :: SomeException) -> throw exception)
 
                local ( \ env -> env {pending = (Just pend)}) (interpret c)
 
@@ -79,18 +81,26 @@ interpret program =
             do
                mPending <- pending <$> ask
                aData <- appData <$> ask
-               let exception = (TP.PeerException TP.NetworkException "" mPending)
-               m <- liftIO $ catch
-                    (TOUT.timeout t (SN.appRead aData))
-                    (\(e :: SomeException) -> throw exception)
+               hostName <- host <$> ask
 
-               case m of
-                   Nothing -> throw (TP.PeerException TP.TimeOutException "" mPending)
-                   Just d -> interpret (fun d)
+               let networkExcpetion =
+                       makeException TP.NetworkException hostName mPending
+
+               mTOut <- liftIO $ catch
+                            (TOUT.timeout t (SN.appRead aData))
+                            (\(e :: SomeException) -> throw networkExcpetion)
+
+               let timeOutException =
+                       makeException TP.NetworkException hostName mPending
+
+               maybe (throw timeOutException)
+                     (\d -> interpret (fun d))
+                     mTOut
 
 
         Free (SaveToFile fN content c) ->
-           do liftIO $ R.runResourceT $ (yield content) $$ (CB.sinkFile ("downloads/" ++ fN))
+           do liftIO $ R.runResourceT $ (yield content)
+                                      $$ (CB.sinkFile fN)
               interpret c
 
         Free (GetPendingPiece fun) ->
@@ -98,12 +108,19 @@ interpret program =
                interpret (fun mPending)
 
         Free (Throw ex c) ->
-               do mPending <- pending <$> ask
-                  liftIO $ throw ( TP.PeerException ex "" mPending)
+            do mPending <- pending <$> ask
+               hostName <- host <$> ask
+               let exception =
+                      makeException ex hostName mPending
+
+               liftIO $ throw exception
 
 
         Pure x -> return x
 
+
+makeException reason hName pending =
+    TP.PeerException reason hName pending
 
 
 requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)
