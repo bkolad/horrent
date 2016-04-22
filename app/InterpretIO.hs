@@ -91,7 +91,7 @@ interpret program =
                             (\(e :: SomeException) -> throw networkExcpetion)
 
                let timeOutException =
-                       makeException TP.NetworkException hostName mPending
+                       makeException TP.TimeOutException hostName mPending
 
                maybe (throw timeOutException)
                      (\d -> interpret (fun d))
@@ -133,12 +133,6 @@ requestNextAndUpdateGlobal pics global =
             do pInfo <- MA.readArray global x -- TODO view pattern
                case pInfo of
                   TP.NotHave -> do
-                     MA.writeArray global x TP.InProgress
-                     return $ Just x
-                  TP.Registered -> do
-                     MA.writeArray global x TP.InProgress
-                     return $ Just x
-                  TP.TimeOut  -> do
                      MA.writeArray global x TP.InProgress
                      return $ Just x
                   TP.InProgress -> reqNext xs global

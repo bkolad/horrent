@@ -41,44 +41,62 @@ main = do result <- runExceptT $ startM "ub222.torrent" --"ubuntu.torrent"  -- "
 startM :: String -> ExceptT String IO ()
 startM tracker =
      do (peers, sizeInfo)  <-  CN.makePeers tracker
-        globalStatus       <- liftIO $ TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
-        liftIO $ print (length peers)
-        liftIO $ threadDelay 1000
-        qu                 <- liftIO $ SQ.makeQueueFromList peers-- (take 10 peers)
-        lStat <- liftIO $ SQ.spawnNThreadsAndWait 20 (SQ.loop qu (runClientSafe globalStatus sizeInfo) [])
-        liftIO $ print (show (filter (\s -> s /= OK) $ M.join lStat))
+        globalStatus       <- liftIO $ makeGlobal sizeInfo
+        qu                 <- liftIO $ SQ.makeQueueFromList peers
+        lStat              <- liftIO $ download 20 qu globalStatus sizeInfo
+        liftIO $ showProblems lStat
+        liftIO $ showMissingPieces globalStatus
+        where
+            makeGlobal sizeInfo =
+                TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
 
-        es                 <- liftIO $  (TP.showGlobal globalStatus)
-        liftIO $ print (show (filter (\(_, s) -> s /= TP.Done) es))
-        return ()
+            download pN qu globalStatus sizeInfo = do
+                let run = SQ.loop qu (runClientSafe globalStatus sizeInfo) []
+                SQ.spawnNThreadsAndWait 20 run
+
+            showProblems lStat = do
+                let notOK = filter (\s -> s /= OK) $ M.join lStat
+                print $ show notOK
+
+            showMissingPieces globalStatus = do
+                es <- TP.showGlobal globalStatus
+                let missingP = filter (\(_, s) -> s /= TP.Done) es
+                print (show missingP)
 
 
 
 
 
-data PeerStatus = OK | Error String Int
+data PeerStatus = OK
+                | TubeError String (Maybe Int)
+                | HandShakeError String
     deriving (Show, Eq)
 
 
 runClientSafe ::  TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO PeerStatus
 runClientSafe globalStatus sizeInfo peer = do
-    let rr = (\ _ -> OK) <$> (runClient globalStatus sizeInfo peer)
-    catches rr
-          [ Handler (handleTubeException globalStatus)
-          ,
-
-          Handler (\ (SomeException ex) ->
-              return $ Error ((P.hostName peer)++" "++show ex) (-999))
+    catches (runClient globalStatus sizeInfo peer)
+          [ tubeExceptionHandler globalStatus
+          , ioExceptionHandler peer ]
 
 
-          ]
+
+tubeExceptionHandler globalStatus =
+    Handler $ handle
+    where
+        handle (TP.PeerException e host iM) =
+            case iM of
+                Nothing ->
+                    return (TubeError host iM)
+                Just x -> do
+                    setStatusNotHave x globalStatus
+                    return (TubeError host iM)
 
 
-handleTubeException global (TP.PeerException e host iM)  =
-        case iM of
-            Nothing -> return (Error host (-11))
-            Just x -> do setStatusNotHave x global
-                         return (Error host x)
+
+ioExceptionHandler peer =
+    Handler (\ (SomeException ex) ->
+        return $ HandShakeError ((P.hostName peer)++" "++show ex))
 
 
 
@@ -88,43 +106,44 @@ setStatusNotHave x global =
 
 
 
+runClient :: TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO PeerStatus
+runClient globalStatus sizeInfo peer = CN.runTCPClient
+    (CN.clientSettings (P.port peer) (BC.pack $ P.hostName peer))
+        $ \appData -> do
 
+            let source =  appSource
+                peerSink   = CN.appSink appData
 
-runClient :: TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO ()
-runClient globalStatus sizeInfo peer =
-    CN.runTCPClient (CN.clientSettings (P.port peer) (BC.pack $ P.hostName peer)) $ \appData -> do
-        print "Start"
-        let source =  appSource
-            peerSink   = CN.appSink appData
-        print "TUBE"
+            let infoHash = P.infoHash peer
+            T.sendHandshake infoHash peerSink
 
-        let infoHash = P.infoHash peer
-        T.sendHandshake infoHash peerSink
+            let action = tube peer source
+                env = IPIO.InterpreterEnv { IPIO.appData  = appData
+                                          , IPIO.global   = globalStatus
+                                          , IPIO.sizeInfo = sizeInfo
+                                          , IPIO.peerSink = peerSink
+                                          , IPIO.pending  = Nothing
+                                          , IPIO.host     = (P.hostName peer)
+                                          }
 
-        let action = (tube peer source)
-            env = IPIO.InterpreterEnv { IPIO.appData  = appData
-                                      , IPIO.global   = globalStatus
-                                      , IPIO.sizeInfo = sizeInfo
-                                      , IPIO.peerSink = peerSink
-                                      , IPIO.pending  = Nothing
-                                      , IPIO.host     = (P.hostName peer)
-                                      }
-
-        runReaderT (IPIO.interpret action) env
+            runReaderT (IPIO.interpret action) env
 
 
 setStatusTimetOut :: Int -> TP.GlobalPiceInfo -> IO()
 setStatusTimetOut x global =
-    STM.atomically $ MA.writeArray global x TP.TimeOut
+    STM.atomically $ MA.writeArray global x TP.NotHave
 
 
-tube :: P.Peer -> Source Action B.ByteString -> Action ()
+tube :: P.Peer -> Source Action B.ByteString -> Action PeerStatus
 tube peer getFrom  = do
 
    (nextSource, handshake) <- getFrom $$+ T.recHandshake
 
    case handshake of
-      Left l -> logF ("Bad Handshake : " ++l)
+      Left l -> do
+          let msg = "Bad Handshake : " ++l
+          logF msg
+          return $ HandShakeError msg
 
       Right (bitFieldLeftOver, hand) -> do
           let gg = ((T.flushLeftOver bitFieldLeftOver)
@@ -149,9 +168,13 @@ appSource =
 
 
 
-saveToFile :: Sink ((String, BC.ByteString)) Action ()
+
+saveToFile :: Sink ((String, BC.ByteString)) Action PeerStatus
 saveToFile = do
-  awaitForever (lift . save)
-  where
-    save ::  (String, BC.ByteString) -> Action ()
-    save (fN, c) = saveToFileF ("downloads/" ++fN) c
+    mX <- await
+    case mX of
+        Nothing ->
+            return OK
+        Just (fN, c) -> do
+            lift $ saveToFileF ("downloads/" ++fN) c
+            saveToFile
