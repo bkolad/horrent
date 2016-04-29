@@ -1,5 +1,5 @@
-module BencodeInfo (BEncode, annouce, infoHash, parseFromFile, parseFromBS,
-peers, piceSize, torrentSize, piecesHashSeq, toByteString) where
+module BencodeInfo (BP.BEncode, annouce, infoHash, parseFromFile, parseFromBS,
+peers, piceSize, torrentSize, piecesHashSeq) where
 
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -16,29 +16,65 @@ import Data.Either
 import Control.Applicative
 import Types
 import Debug.Trace
+import qualified BencodeParser as BP
+import Control.Lens
+
 
 -- http://blog.sumtypeofway.com/recursion-schemes-part-2/
 
-data BStringT = BString BC.ByteString deriving (Eq, Show)
 
-data BEncode = BStr BStringT
-             | BInt Int
-             | BList [BEncode]
-             | BDic [(BStringT, BEncode)]
-             deriving (Eq, Show)
+data DicInfo = Announce
+             | PiecesHash
+             | Peers
+             | PieceLength
+             | Info
+             | InfoLength
+             | Name
+             deriving Show
 
-{--PUBLIC--}
+mkLens Announce    = BP.keyL "announce"
+mkLens PiecesHash  = (BP.keyL "info") . (BP.keyL "pieces")
+mkLens Peers       = (BP.keyL "peers")
+mkLens PieceLength = (BP.keyL "info") . (BP.keyL "piece length")
+mkLens Info        = BP.keyL "info"
+mkLens InfoLength  = (BP.keyL "info") . (BP.keyL "length")
+mkLens Name        = (BP.keyL "info") .(BP.keyL "name")
 
-annouce :: BEncode ->Either String String
-annouce inDic =  BC.unpack <$> ((find "announce" inDic) >>= getBStr)
+genericGet dI lenS dic =
+    let ret = dic ^? (mkLens dI) . lenS
+        msg = "Bencode parsing error: Missing " ++ (show dI) ++" "++(show dic)
+    in maybe (Left msg) Right ret
 
-peers :: BEncode -> Either String BC.ByteString
-peers inDic =  ((find "peers" inDic) >>= getBStr)
 
-piecesHash :: BEncode -> Either String BC.ByteString
-piecesHash inDic = do infoDic <- find "info" inDic
-                      (BStr (BString bStr)) <- find "pieces" infoDic
-                      return bStr
+annouce :: BP.BEncode -> Either String String
+annouce dic = BC.unpack <$> (genericGet Announce BP.bStrL dic)
+
+
+peers :: BP.BEncode -> Either String BC.ByteString
+peers = genericGet Peers BP.bStrL
+
+
+piecesHash :: BP.BEncode -> Either String BC.ByteString
+piecesHash = genericGet PiecesHash BP.bStrL
+
+
+piceSize :: BP.BEncode -> Either String Int
+piceSize = genericGet PieceLength BP.bIntL
+
+
+torrentSize :: BP.BEncode -> Either String Int
+torrentSize = genericGet InfoLength BP.bIntL
+
+
+infoHash :: BP.BEncode -> Either String String
+infoHash dic = fun <$> (genericGet Info BP.idL dic)
+    where
+        fun = BC.unpack . SHA1.hash . BP.toByteString
+
+
+torrentName :: BP.BEncode -> Either String BC.ByteString
+torrentName = genericGet Name BP.bStrL
+
 
 
 splitEvery :: Int -> BC.ByteString -> HashInfo
@@ -48,41 +84,40 @@ splitEvery n bc = if (BC.null bc)
                   where (s,e) = BC.splitAt n bc
 
 
-piecesHashSeq :: BEncode -> Either String HashInfo
+piecesHashSeq :: BP.BEncode -> Either String HashInfo
 piecesHashSeq dic = (splitEvery 20) <$> piecesHash dic
 
-piceSize :: BEncode ->Either String Int
-piceSize inDic = do  infoDic <- find "info" inDic
-                     (BInt len) <- find "piece length" infoDic
-                     return len
 
-torrentSize :: BEncode ->Either String Int
-torrentSize inDic = do infoDic <- find "info" inDic
-                       (BInt len) <- find "length" infoDic
-                       return len
-
-
-infoHash :: BEncode -> Either String String
-infoHash inDic = (BC.unpack . SHA1.hash . toByteString) <$> (find "info" inDic)
-
-parseFromFile :: String ->  ExceptT String IO BEncode
+parseFromFile :: String ->  ExceptT String IO BP.BEncode
 parseFromFile path = do content <- liftIO $ B.readFile path
-                        liftEither $ P.parseOnly bencodeParser content
+                        liftEither $ P.parseOnly BP.bencodeParser content
 
 
-parseFromBS :: B.ByteString -> Either String BEncode
-parseFromBS x = P.parseOnly bencodeParser x
+parseFromBS :: B.ByteString -> Either String BP.BEncode
+parseFromBS x = P.parseOnly BP.bencodeParser x
 
-getBStr (BStr (BString bs)) = Right bs
-getBStr _ = Left "Not a String"
+torrent = "ub222.torrent"
+
+printer:: IO()
+printer = do content <- runExceptT $ parseFromFile torrent
+             case content of
+                  Left l ->
+                      print $ "Problem with reading torrent file" ++ (show l)
+                  Right dic -> do
+                      print $ annouce dic
+                      print $ torrentName dic
+                      print $ piceSize dic
+                      print $ torrentSize dic
+                      print $ infoHash dic
+
 
 
 {--PRIVATE--}
-
+{--
 find :: String -> BEncode -> Either String  BEncode
 find keyS (BDic ls) = mHead $ filtered ls
    where filtered l = filter (\(k,v)-> k == key) l
-         key =  BString $ BC.pack keyS
+         key =  BC.pack keyS
          mHead [] = Left $ "Couldn't find "++keyS++" key"
          mHead ((x1,x2):xs) = Right x2
 find keyS _ = Left "Give me dictionary!"
@@ -90,40 +125,13 @@ find keyS _ = Left "Give me dictionary!"
 
 toByteString::BEncode->BC.ByteString
 toByteString (BInt i) = B.concat $ map BC.pack ["i", show i, "e"]
-toByteString (BStr (BString bs)) = B.concat [BC.pack(show (B.length bs) ++":"), bs]
+toByteString (BStr  bs) = B.concat [BC.pack(show (B.length bs) ++":"), bs]
 toByteString (BList ls) = BC.concat [BC.pack "l", BC.concat (map toByteString ls), BC.pack "e"]
 toByteString (BDic [])=BC.pack ""
 toByteString (BDic ls) = B.concat [BC.pack "d",entryToBS ls ,BC.pack "e"]
   where entryToBS [] = BC.pack ""
         entryToBS ((k,v):xs)= B.concat [toByteString $ BStr k ,toByteString v, entryToBS xs]
 
-
-
-{--PARSERS--}
-
-num::P.Parser String
-num = many1 digit
-
-bInt::P.Parser BEncode
-bInt = (BInt . read) <$> (char 'i' *> num <* char 'e')
-
-bString :: P.Parser BStringT
-bString = do n <- num
-             _ <- char ':'
-             BString <$> (P.take (read n))
-
-bList :: P.Parser BEncode
-bList = (BList) <$> (char 'l' *> (many1 (bInt <|> (BStr <$> bString) <|> bList <|> bDic)) <* char 'e')
-
-
-dicEntry :: P.Parser (BStringT, BEncode)
-dicEntry = ((,)<$>bString <*> bencodeParser)
-
-bDic :: P.Parser BEncode
-bDic = BDic<$>((char 'd' *> many1 dicEntry <* char 'e'))
-
-bencodeParser :: P.Parser BEncode
-bencodeParser = bInt <|> (BStr <$> bString) <|> bList <|> bDic
 
 
 
@@ -158,13 +166,14 @@ nl = ("\n")
 
 prettyPrint :: Int -> BEncode -> String
 prettyPrint n (BInt i) = show i
-prettyPrint n (BStr (BString s)) = show s
+prettyPrint n (BStr (s)) = show s
 prettyPrint n (BList []) = ""
 prettyPrint n (BList (x:xs)) = nl ++ (emptySpace (n+3))
                                    ++ (prettyPrint (n+1) x)
                                    ++ (prettyPrint n (BList xs))
 prettyPrint n (BDic []) = ""
-prettyPrint n (BDic ((BString key, value):xs)) = nl ++ (emptySpace n)
+prettyPrint n (BDic ((key, value):xs)) = nl ++ (emptySpace n)
                                                      ++ (show key) ++ " ::-> "
                                                      ++ (prettyPrint (n+1) value)
                                                      ++ (prettyPrint n (BDic xs))
+--}

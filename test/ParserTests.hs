@@ -1,13 +1,14 @@
 module ParserTests (testAllTorrents) where
 
 import qualified BencodeInfo as BP
+import qualified BencodeParser as BP
 import Control.Monad.Except (ExceptT, liftIO, runExceptT)
 import qualified System.Directory as Dir
 import qualified Data.List as L
 import qualified Test.Tasty.HUnit as THU
 import Test.Tasty
 
-torrents = "/test/TestTorrents/"
+torrents = "/TestTorrents/"
 
 getTorrentsDir = do
     currentDir <- Dir.getCurrentDirectory
@@ -37,6 +38,14 @@ convertToBsAndParseBack (torrent, content) =
         msg = "Converting error for " ++ torrent
     in THU.assertEqual msg (Right content) recContent
 
+hashTest :: (String, BP.BEncode) -> THU.Assertion
+hashTest (torrent, content) =
+    let bs = BP.toByteString content
+        recContent = BP.parseFromBS bs
+        bs2 = BP.toByteString <$>recContent
+        msg = "Converting error for " ++ torrent
+    in THU.assertEqual msg (Right bs) bs2
+
 
 testAllTorrents :: IO TestTree
 testAllTorrents = do
@@ -59,8 +68,13 @@ testAllTorrents = do
                     testGroup "Convert to BS and Back" $
                         map (THU.testCase tN . convertToBsAndParseBack) tL
 
+                hTest =
+                    testGroup "BS test" $
+                        map (THU.testCase tN . hashTest) tL
+
+
                 tests = testGroup "All Tests"
-                        [sizeNotZeroTests ,convTest]
+                        [sizeNotZeroTests ,convTest, hTest]
 
             in return tests
 
