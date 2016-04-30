@@ -38,7 +38,7 @@ mkLens Peers       = (BP.keyL "peers")
 mkLens PieceLength = (BP.keyL "info") . (BP.keyL "piece length")
 mkLens Info        = BP.keyL "info"
 mkLens InfoLength  = (BP.keyL "info") . (BP.keyL "length")
-mkLens Name        = (BP.keyL "info") .(BP.keyL "name")
+mkLens Name        = (BP.keyL "info") . (BP.keyL "name")
 
 genericGet dI lenS dic =
     let ret = dic ^? (mkLens dI) . lenS
@@ -109,71 +109,3 @@ printer = do content <- runExceptT $ parseFromFile torrent
                       print $ piceSize dic
                       print $ torrentSize dic
                       print $ infoHash dic
-
-
-
-{--PRIVATE--}
-{--
-find :: String -> BEncode -> Either String  BEncode
-find keyS (BDic ls) = mHead $ filtered ls
-   where filtered l = filter (\(k,v)-> k == key) l
-         key =  BC.pack keyS
-         mHead [] = Left $ "Couldn't find "++keyS++" key"
-         mHead ((x1,x2):xs) = Right x2
-find keyS _ = Left "Give me dictionary!"
-
-
-toByteString::BEncode->BC.ByteString
-toByteString (BInt i) = B.concat $ map BC.pack ["i", show i, "e"]
-toByteString (BStr  bs) = B.concat [BC.pack(show (B.length bs) ++":"), bs]
-toByteString (BList ls) = BC.concat [BC.pack "l", BC.concat (map toByteString ls), BC.pack "e"]
-toByteString (BDic [])=BC.pack ""
-toByteString (BDic ls) = B.concat [BC.pack "d",entryToBS ls ,BC.pack "e"]
-  where entryToBS [] = BC.pack ""
-        entryToBS ((k,v):xs)= B.concat [toByteString $ BStr k ,toByteString v, entryToBS xs]
-
-
-
-
-{--TESTS--}
-
-torrent = "ub222.torrent"--"karl_marx.torrent"--"tom.torrent"--"tom.torrent" -- "karl_marx.torrent"--"tom.torrent" --
-
-printer:: IO()
-printer = do content <- runExceptT $ parseFromFile torrent
-             case content of
-                  Left l -> print $ "Problem with reading torrent file" ++ (show l)
-                  Right dic -> putStr $ prettyPrint 0 dic
-
-
-infoPrinter::IO()
-infoPrinter = do content <- runExceptT $ parseFromFile torrent
-                 case content >>= (find "info") of
-                      Left e-> print e
-                      Right c  -> print (toByteString c)
-
-piecesPrinter::IO()
-piecesPrinter = do content <- runExceptT $ parseFromFile torrent
-                   case content>>=piecesHashSeq of
-                      Left e-> print e
-                      Right c  -> print $ B16.encode (Seq.index c 10)
-
-
-emptySpace n =  concat $ replicate n "  "
-
-
-nl = ("\n")
-
-prettyPrint :: Int -> BEncode -> String
-prettyPrint n (BInt i) = show i
-prettyPrint n (BStr (s)) = show s
-prettyPrint n (BList []) = ""
-prettyPrint n (BList (x:xs)) = nl ++ (emptySpace (n+3))
-                                   ++ (prettyPrint (n+1) x)
-                                   ++ (prettyPrint n (BList xs))
-prettyPrint n (BDic []) = ""
-prettyPrint n (BDic ((key, value):xs)) = nl ++ (emptySpace n)
-                                                     ++ (show key) ++ " ::-> "
-                                                     ++ (prettyPrint (n+1) value)
-                                                     ++ (prettyPrint n (BDic xs))
---}

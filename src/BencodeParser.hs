@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, GADTs #-}
 
 module BencodeParser ( BEncode
                      , bStrL
@@ -21,8 +21,20 @@ import Control.Lens
 data BEncode = BStr BC.ByteString
              | BInt Int
              | BList [BEncode]
-             | BDic (Map.Map BC.ByteString BEncode)
-             deriving (Eq, Show)
+             | BDic (Map.Map BEncode BEncode)
+             deriving (Eq, Show, Ord)
+
+
+instance Plated BEncode where
+    plate f (BList ls) = BList <$> (traverse f ls)
+    plate f (BDic dic) =
+        BDic <$> --Map.fromList $ traverse (\(k, v) -> (\x -> (k,x)) <$> f v) (Map.toList dic)
+
+        tvk f dic
+    --    tvk = Map.fromList $ traverse (\(k, v) -> (,) k $ f k v) (Map.toList dic)
+    plate _ x = pure x
+
+tvk fun dic = Map.fromList <$> (traverse (\(k, v) ->  (,)<$>(fun k) <*> (fun v)) (Map.toList dic))
 
 
 idL :: Prism' BEncode BEncode
@@ -46,7 +58,7 @@ keyL :: String -> Prism' BEncode BEncode
 keyL k = prism id f
     where
         f dc@(BDic d) =
-            case Map.lookup (BC.pack k) d of
+            case Map.lookup (BStr (BC.pack k)) d of
                 Just v -> Right v
                 Nothing -> Left dc
         f e = Left e
@@ -76,28 +88,38 @@ bList = BList <$> (char 'l' *> vals <* char 'e')
         vals = many1 $ bInt <|> bStr <|> bList <|> bDic
 
 
-dicEntry :: Parser (BC.ByteString, BEncode)
-dicEntry = (,) <$> bString <*> bencodeParser
+dicEntry :: Parser (BEncode, BEncode)
+dicEntry = (,) <$> bStr <*> bencodeParser
 
 
 bDic :: Parser BEncode
 bDic = BDic . Map.fromList <$> (char 'd' *> many1 dicEntry <* char 'e')
 
-
 bencodeParser :: Parser BEncode
 bencodeParser = bInt <|> bStr <|> bList <|> bDic
 
 
-toByteString::BEncode -> BC.ByteString
-toByteString (BInt i)   = B.concat $ map BC.pack ["i", show i, "e"]
-toByteString (BStr  bs) = B.concat [BC.pack(show (B.length bs) ++":"), bs]
-toByteString (BList ls) = BC.concat [BC.pack "l", BC.concat (map toByteString ls), BC.pack "e"]
-toByteString (BDic dic) = B.concat [BC.pack "d", dBS dic,BC.pack "e"]
+toByteString dic = para convertToBS dic
+
+convertToBS :: BEncode -> [BC.ByteString] -> BC.ByteString
+convertToBS dic kls =
+    case dic of
+        (BInt i)   -> BC.pack ("i" ++ show i ++"e")
+        (BStr  bs) -> B.concat [BC.pack (show (B.length bs) ++":"), bs]
+        (BList ls) -> B.concat [BC.pack "l", B.concat kls, BC.pack "e"]
+        (BDic dic) -> B.concat [BC.pack "d", B.concat kls, BC.pack "e"]
+
+
+ben = BDic $ Map.singleton (BStr (BC.pack "pk")) (BList [BInt 1, BInt 2])
+
+sss = toByteString1 ben
+
+
+toByteString1 ::BEncode -> BC.ByteString
+toByteString1 (BInt i)   = B.concat $ map BC.pack ["i", show i, "e"]
+toByteString1 (BStr  bs) = B.concat [BC.pack(show (B.length bs) ++":"), bs]
+toByteString1 (BList ls) = B.concat [BC.pack "l", BC.concat (map toByteString ls), BC.pack "e"]
+toByteString1 (BDic dic) = B.concat [BC.pack "d", dBS dic,BC.pack "e"]
     where
         dBS dic = Map.foldlWithKey' entryToBS BC.empty dic
-        entryToBS acc k v = B.concat [acc, toByteString $ BStr k ,toByteString v]
-
---toByteString (BDic [])=BC.pack ""
---toByteString (BDic ls) = B.concat [BC.pack "d",entryToBS ls ,BC.pack "e"]
- -- where entryToBS [] = BC.pack ""
-    --    entryToBS ((k,v):xs)= B.concat [toByteString $ BStr k ,toByteString v, entryToBS xs]
+        entryToBS acc k v = B.concat [acc, toByteString k ,toByteString v]
