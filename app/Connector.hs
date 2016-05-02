@@ -3,7 +3,7 @@
 module Connector (makePeers) where
 
 import qualified Peer as P
-import qualified BencodeInfo as BP (BEncode, annouce, infoHash, parseFromFile, parseFromBS, peers, piceSize, torrentSize, piecesHashSeq)
+import qualified BencodeInfo as BP
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
@@ -27,7 +27,7 @@ import Data.List
 type TorrentContent = BP.BEncode
 
 
-makePeers :: String -> TP.ExceptT String IO ([P.Peer], TP.SizeInfo)
+makePeers :: String -> TP.ExceptT String IO ([P.Peer], TP.SizeInfo, B.ByteString)
 makePeers tracker =
   do torrentContent <-  BP.parseFromFile tracker
      sizeInfo       <- TP.liftEither $ getSizeInfo torrentContent
@@ -47,7 +47,8 @@ makePeers tracker =
                  }
 
      let peers = map makePeer ipsAndPorts
-     return (peers, sizeInfo)
+     name <- TP.liftEither $ BP.torrentName torrentContent
+     return (peers, sizeInfo, name)
 
 
 

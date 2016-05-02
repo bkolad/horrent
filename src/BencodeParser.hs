@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 
 module BencodeParser ( BEncode
                      , bStrL
@@ -7,6 +7,7 @@ module BencodeParser ( BEncode
                      , idL
                      , toByteString
                      , bencodeParser
+                     , listL
                      ) where
 
 
@@ -25,16 +26,17 @@ data BEncode = BStr BC.ByteString
              deriving (Eq, Show, Ord)
 
 
+
 instance Plated BEncode where
-    plate f (BList ls) = BList <$> (traverse f ls)
-    plate f (BDic dic) =
-        BDic <$> --Map.fromList $ traverse (\(k, v) -> (\x -> (k,x)) <$> f v) (Map.toList dic)
+    plate f ec =
+        case ec of
+            (BList ls) -> BList <$> (traverse f ls)
+            (BDic dic) -> BDic <$> tvk f dic
+            k -> pure k
+        where
+            tvk fun dic = Map.fromList <$> (traverse (cvt fun) (Map.toList dic))
+            cvt fun (k, v) = (,) <$>(fun k) <*> (fun v)
 
-        tvk f dic
-    --    tvk = Map.fromList $ traverse (\(k, v) -> (,) k $ f k v) (Map.toList dic)
-    plate _ x = pure x
-
-tvk fun dic = Map.fromList <$> (traverse (\(k, v) ->  (,)<$>(fun k) <*> (fun v)) (Map.toList dic))
 
 
 idL :: Prism' BEncode BEncode
@@ -53,7 +55,6 @@ bIntL = prism BInt f
         f (BInt i) = Right i
         f l = Left l
 
-
 keyL :: String -> Prism' BEncode BEncode
 keyL k = prism id f
     where
@@ -61,7 +62,18 @@ keyL k = prism id f
             case Map.lookup (BStr (BC.pack k)) d of
                 Just v -> Right v
                 Nothing -> Left dc
+    --    f ls@(BList ds) = BList <$> (sequence (f <$> ds))
+
         f e = Left e
+
+listL :: Prism' BEncode [BEncode]
+listL = prism BList f
+    where
+        f (BList ls) = Right ls
+        f l = Left l
+
+--convertL :: Prism' [BEncode] [(String, Int)]
+--convertL = prism
 
 
 num::Parser String
@@ -104,22 +116,39 @@ toByteString dic = para convertToBS dic
 convertToBS :: BEncode -> [BC.ByteString] -> BC.ByteString
 convertToBS dic kls =
     case dic of
-        (BInt i)   -> BC.pack ("i" ++ show i ++"e")
-        (BStr  bs) -> B.concat [BC.pack (show (B.length bs) ++":"), bs]
+        (BInt i)   -> BC.pack ("i" ++ show i ++ "e")
+        (BStr  bs) -> B.concat [BC.pack $ show (B.length bs) ++ ":", bs]
         (BList ls) -> B.concat [BC.pack "l", B.concat kls, BC.pack "e"]
         (BDic dic) -> B.concat [BC.pack "d", B.concat kls, BC.pack "e"]
 
 
-ben = BDic $ Map.singleton (BStr (BC.pack "pk")) (BList [BInt 1, BInt 2])
+rr = (BList[(BStr $ BC.pack"sdsd"), (BStr $ BC.pack"111")])
 
-sss = toByteString1 ben
+ppp = view bStrLM (BList[(BStr $ BC.pack"sdsd"), (BStr $ BC.pack"111")])
+
+kk = preview (traverse . sLL) [(BStr $ BC.pack"sdsd"), (BStr $ BC.pack"111")]
 
 
-toByteString1 ::BEncode -> BC.ByteString
-toByteString1 (BInt i)   = B.concat $ map BC.pack ["i", show i, "e"]
-toByteString1 (BStr  bs) = B.concat [BC.pack(show (B.length bs) ++":"), bs]
-toByteString1 (BList ls) = B.concat [BC.pack "l", BC.concat (map toByteString ls), BC.pack "e"]
-toByteString1 (BDic dic) = B.concat [BC.pack "d", dBS dic,BC.pack "e"]
+--bStrLM2 :: Lens' BEncode [BC.ByteString]
+--bStrLM2 =  lens undefined undefined
+
+bStrLM :: Prism' BEncode [BC.ByteString]
+bStrLM =  prism (\x -> BList (BStr <$> x)) f
     where
-        dBS dic = Map.foldlWithKey' entryToBS BC.empty dic
-        entryToBS acc k v = B.concat [acc, toByteString k ,toByteString v]
+        f (BList ((BStr s) : xs)) = liftA2 (:) (Right s) (f (BList xs))
+        f (BList []) = Right []
+        f l = Left l
+
+sLL :: Prism' BEncode BC.ByteString
+sLL = prism BStr  f
+    where
+        f (BStr s) = Right s
+        f l = Left l
+
+
+
+{--
+tt :: Traversal' [BEncode] [BC.ByteString]
+tt f ((BStr x):xs) = pure [x]
+tt _ bv = pure bv
+--}

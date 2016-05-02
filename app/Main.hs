@@ -1,15 +1,38 @@
-{-# LANGUAGE ScopedTypeVariables #-}
 module Main where
-{-- import PeersControler (start)
-import Peer (showPeer) --}
+
 import Types
 import System.Directory
-import qualified Data.List as L
 import Data.List.Ordered
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
+import qualified Data.List as L
+import qualified PeersControlerN as PC
 import qualified Control.Monad as M
-import Control.Applicative
+import qualified Data.ByteString as B
+
+
+main::IO()
+main = do result <- runExceptT $ PC.startM "tom.torrent"
+          case  result of
+              Left str -> print str
+              Right x -> process x
+
+
+process (problems, missing, torrentName) =
+    if (null missing)
+        then
+            do print "conc"
+               concatFiles torrentName
+               print "OK"
+        else
+            do print "PROBLEMS"
+               print $ show problems
+               print $ show missing
+
+
+concatFiles torrentName =
+    do allF <- getDirectoryContents "downloads/"
+       let sortedFiles = L.sortOn (read :: String -> Int) $ filter isInteger allF
+       M.mapM (app torrentName) sortedFiles
+
 
 
 isInteger s = case reads s :: [(Integer, String)] of
@@ -17,16 +40,7 @@ isInteger s = case reads s :: [(Integer, String)] of
   _         -> False
 
 
-app fN= do print fN
-           cont <- B.readFile ("downloads/"++fN)
-           B.appendFile "cont.xx" cont
-
-
-
-files = do allF <- getDirectoryContents "downloads/"
-           let sortedFiles = sortOn (read :: String -> Int) $ filter isInteger allF
-           print sortedFiles
-           print $ ((map show [0.. 2247]) L.\\ sortedFiles)
-           M.mapM app sortedFiles
-
-main = app "ub.torrent"
+app torrentName fN =
+    do print fN
+       cont <- B.readFile ("downloads/"++fN)
+       B.appendFile torrentName cont

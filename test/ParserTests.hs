@@ -72,7 +72,6 @@ testAllTorrents = do
                     testGroup "BS test" $
                         map (THU.testCase tN . hashTest) tL
 
-
                 tests = testGroup "All Tests"
                         [sizeNotZeroTests ,convTest, hTest]
 

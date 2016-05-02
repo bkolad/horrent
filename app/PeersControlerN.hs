@@ -13,15 +13,11 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Types as TP
 import qualified Data.ByteString as B
 
-import Control.Monad (unless, void)
 import qualified TubeDSL as T
 import qualified Message as M
 import qualified InterpretIO as IPIO
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
-import qualified Data.Streaming.Network as SN
-
-import Control.Concurrent (threadDelay)
 import Action
 import Control.Monad.Trans.Class (lift)
 import qualified Control.Monad as M
@@ -32,20 +28,24 @@ import qualified Control.Concurrent.STM as STM
 import Control.Monad.Reader
 
 
-
+{--
 main::IO()
 main = do result <- runExceptT $ startM "ub222.torrent" --"ubuntu.torrent"  -- "tom.torrent"--
-          print result
+          case  result of
+              Left str -> print str
+              Right (problems, missing, fN) -> print ""
+--}
 
-
-startM :: String -> ExceptT String IO ()
+--startM :: String -> ExceptT String IO ()
 startM tracker =
-     do (peers, sizeInfo)  <-  CN.makePeers tracker
+     do (peers, sizeInfo, fN)  <-  CN.makePeers tracker
         globalStatus       <- liftIO $ makeGlobal sizeInfo
         qu                 <- liftIO $ SQ.makeQueueFromList peers
         lStat              <- liftIO $ download 20 qu globalStatus sizeInfo
-        liftIO $ showProblems lStat
-        liftIO $ showMissingPieces globalStatus
+        let problems = filter (OK /=) $ M.join lStat
+        missing <- liftIO $ missingPieces globalStatus
+        return (problems, missing, show fN)
+
         where
             makeGlobal sizeInfo =
                 TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
@@ -54,14 +54,9 @@ startM tracker =
                 let run = SQ.loop qu (runClientSafe globalStatus sizeInfo) []
                 SQ.spawnNThreadsAndWait 20 run
 
-            showProblems lStat = do
-                let notOK = filter (\s -> s /= OK) $ M.join lStat
-                print $ show notOK
-
-            showMissingPieces globalStatus = do
+            missingPieces globalStatus = do
                 es <- TP.showGlobal globalStatus
-                let missingP = filter (\(_, s) -> s /= TP.Done) es
-                print (show missingP)
+                return $ filter (\(_, s) -> s /= TP.Done) es
 
 
 
@@ -80,7 +75,6 @@ runClientSafe globalStatus sizeInfo peer = do
           , ioExceptionHandler peer ]
 
 
-
 tubeExceptionHandler globalStatus =
     Handler $ handle
     where
@@ -93,17 +87,14 @@ tubeExceptionHandler globalStatus =
                     return (TubeError host iM)
 
 
-
 ioExceptionHandler peer =
     Handler (\ (SomeException ex) ->
         return $ HandShakeError ((P.hostName peer)++" "++show ex))
 
 
-
 setStatusNotHave :: Int -> TP.GlobalPiceInfo -> IO()
 setStatusNotHave x global =
     STM.atomically $ MA.writeArray global x TP.NotHave
-
 
 
 runClient :: TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO PeerStatus
@@ -153,8 +144,6 @@ tube peer getFrom  = do
           (nextSource $=+ gg $$+- saveToFile)
 
 
-
-
 appSource :: Producer Action B.ByteString
 appSource =
     loop
@@ -165,8 +154,6 @@ appSource =
         unless (B.null bs) $ do
             yield bs
             loop
-
-
 
 
 saveToFile :: Sink ((String, BC.ByteString)) Action PeerStatus
