@@ -27,9 +27,6 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Class
 
 
--- http://blog.sumtypeofway.com/recursion-schemes-part-2/
-
-
 data DicInfo = Announce
              | PiecesHash
              | Peers
@@ -39,6 +36,7 @@ data DicInfo = Announce
              | Name
              | MultiFiles
              deriving Show
+
 
 mkLens :: DicInfo -> Prism' BP.BEncode BP.BEncode
 mkLens di =
@@ -55,12 +53,14 @@ mkLens di =
             infoLens :: Prism' BP.BEncode BP.BEncode
             infoLens = BP.keyL "info"
 
+
 filesLs :: Prism' BP.BEncode BP.BEncode
 filesLs = (BP.keyL "info") . (BP.keyL "files")
 
+
 genericGet dI lenS dic =
     let ret = dic ^? (mkLens dI) . lenS
-        msg = "Bencode parsing error: Missing " ++ (show dI) -- ++" "++(show dic)
+        msg = "Bencode parsing error: Missing " ++ (show dI)
     in maybe (Left msg) Right ret
 
 
@@ -113,11 +113,11 @@ piecesHashSeq :: BP.BEncode -> Either String HashInfo
 piecesHashSeq dic = (splitEvery 20) <$> piecesHash dic
 
 
-multiFiles :: BP.BEncode -> Maybe [([BC.ByteString], Int)]
-multiFiles dic =
-    let filesBencode = (dic ^? filesLs)
-        fs =  (toPathLen . children) <$> filesBencode
-    in sequence $ runMaybeT (convert fs)
+multiFiles :: BP.BEncode -> Either String [([BC.ByteString], Int)]
+multiFiles dic = do
+    filesBencode <- files dic
+    let fs =  (sequence . toPathLen . children) filesBencode
+    maybe (Left "Wrong multi-files section in infodic") Right fs
 
 
 parseFromFile :: String ->  ExceptT String IO BP.BEncode
@@ -140,21 +140,9 @@ printer = do content <- runExceptT $ parseFromFile torrent
                       print $ multiFiles dic
 
 
-liftMaybe =  MaybeT . return
 
-convert :: Maybe [Maybe ([BP.BEncode] , Int)]
-        -> MaybeT [] ([BC.ByteString], Int)
-convert files = do
-    fsLs <- liftMaybe files
-    fs <- lift fsLs
-    (bsLs, it) <- liftMaybe fs
-    return (toListOf (traverse . BP.bStrL) bsLs, it)
-
-toPathLen :: [BP.BEncode] -> [Maybe ([BP.BEncode], Int)]
+toPathLen :: [BP.BEncode] -> [Maybe ([BC.ByteString], Int)]
 toPathLen ls =
-    let path = BP.keyL "path" . BP.listL
+    let path = BP.keyL "path" . BP.listL . traverse . BP.bStrL
         len  = BP.keyL "length" . BP.bIntL
-    in map (\dic -> sequenceT (dic ^? path, dic ^? len)) ls
-
-sequenceT :: Applicative f => (f a1, f a) -> f (a1, a)
-sequenceT (a, b)= (,) <$> a <*> b
+    in map (\dic -> sequence (dic ^.. path, dic ^? len)) ls
