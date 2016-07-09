@@ -48,7 +48,6 @@ makePeers tracker =
                  , P.unChoked     = False
                  , P.buffer       = BC.empty
                  , P.pieceHashes  = pHashes
-    --             , P.pendingPiece = Nothing
                  }
 
      let peers = map makePeer ipsAndPorts
@@ -70,9 +69,11 @@ getPeers :: TorrentContent -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
 getPeers torrentContent =
     do ann     <- TP.liftEither $ BP.annouce torrentContent
        annType <- TP.liftEither $ BP.getAnnounce ann
+       infoH   <- TP.liftEither $ BP.infoHash torrentContent
+
        case annType of
            BP.HTTP tracker -> do
-               urlTracker <- TP.liftEither $ trackerUrl tracker torrentContent
+               urlTracker <- TP.liftEither $ trackerUrl tracker infoH torrentContent
                TP.liftIO $ print urlTracker
 
                resp       <- TP.liftIO . getResponseFromTracker $ urlTracker
@@ -80,19 +81,11 @@ getPeers torrentContent =
                peersBS    <- TP.liftEither $ BP.peers parsedResp
                return $ getIPandPort peersBS
 
-           BP.UDP st -> return $ undefined
-{--
+           BP.UDP st -> do
+               return $ error "Not supported"
 
-peersIpAndPortsFromTracker :: TorrentContent
-                           -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
-peersIpAndPortsFromTracker torrentContent =
-    do urlTracker <- TP.liftEither $ trackerUrl torrentContent
-       TP.liftIO $ print urlTracker
-       resp       <- TP.liftIO . getResponseFromTracker $ urlTracker
-       peersBS    <- TP.liftEither $ (BP.parseFromBS . BC.pack $ resp) >>= BP.peers
-       return $ getIPandPort peersBS
 
---}
+
 type TrackerResponse = String
 type URL = String
 
@@ -103,10 +96,10 @@ getResponseFromTracker url =
     >>= HTTP.getResponseBody
 
 
-trackerUrl :: String -> TorrentContent -> Either String URL
-trackerUrl ann fromDic =
-    do --ann <- BP.annouce fromDic
-       vars <- encodedVars <$> (BP.infoHash fromDic)
+trackerUrl :: String -> String -> TorrentContent -> Either String URL
+trackerUrl ann infoHash romDic =
+    do
+       let vars =  encodedVars infoHash-- <$> f--(BP.infoHash fromDic)
        return $ ann++"?"++vars
     where
         encodedVars hash =
