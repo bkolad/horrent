@@ -143,7 +143,7 @@ ubuntu = "/Users/blaze/Projects/Haskell/horrent/app/ub222.torrent"
 
 
 st = runExceptT $
-    do  content <- parseFromFile torrent
+    do  content <- parseFromFile ubuntu
         pSize <- liftEither $ piceSize content
         pNLls <- liftEither $ parsePathAndLenLs content
         return $ makeSizeInfo pNLls pSize
