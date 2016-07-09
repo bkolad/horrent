@@ -28,19 +28,13 @@ import qualified Control.Concurrent.STM as STM
 import Control.Monad.Reader
 
 
-{--
-main::IO()
-main = do result <- runExceptT $ startM "ub222.torrent" --"ubuntu.torrent"  -- "tom.torrent"--
-          case  result of
-              Left str -> print str
-              Right (problems, missing, fN) -> print ""
---}
-
---startM :: String -> ExceptT String IO ()
 startM tracker =
      do (peers, sizeInfo, fN)  <-  CN.makePeers tracker
+        liftIO $ print peers
+
         globalStatus       <- liftIO $ makeGlobal sizeInfo
         qu                 <- liftIO $ SQ.makeQueueFromList peers
+        liftIO $ print "START"
         lStat              <- liftIO $ download 20 qu globalStatus sizeInfo
         let problems = filter (OK /=) $ M.join lStat
         missing <- liftIO $ missingPieces globalStatus
@@ -144,11 +138,13 @@ tube peer getFrom  = do
           (nextSource $=+ gg $$+- saveToFile)
 
 
-appSource :: Producer Action B.ByteString
+
+
+appSource :: Source Action B.ByteString
 appSource =
     loop
   where
-    read' = readDataWithTimeoutF (2000000)
+    read' = readDataWithTimeoutF (8000000)
     loop = do
         bs <- lift read'
         unless (B.null bs) $ do
@@ -158,6 +154,7 @@ appSource =
 
 saveToFile :: Sink ((String, BC.ByteString)) Action PeerStatus
 saveToFile = do
+    --ll <- appSource
     mX <- await
     case mX of
         Nothing ->

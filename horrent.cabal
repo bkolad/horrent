@@ -55,7 +55,7 @@ executable horrent-exec
                      , streaming-commons
                      , resourcet
                      , free
-
+                     , conduit-merge
                      , tasty
                      , tasty-hunit
                      , tasty-quickcheck

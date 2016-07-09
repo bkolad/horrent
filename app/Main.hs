@@ -8,9 +8,12 @@ import qualified PeersControlerN as PC
 import qualified Control.Monad as M
 import qualified Data.ByteString as B
 
+torrent = "/Users/blaze/Projects/Haskell/horrent/app/zoo.torrent"
+ubuntu = "/Users/blaze/Projects/Haskell/horrent/app/ub222.torrent"
+
 
 main::IO()
-main = do result <- runExceptT $ PC.startM "tom.torrent"
+main = do result <- runExceptT $ PC.startM ubuntu
           case  result of
               Left str -> print str
               Right x -> process x

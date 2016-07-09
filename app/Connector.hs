@@ -29,9 +29,14 @@ type TorrentContent = BP.BEncode
 
 makePeers :: String -> TP.ExceptT String IO ([P.Peer], TP.SizeInfo, B.ByteString)
 makePeers tracker =
-  do torrentContent <-  BP.parseFromFile tracker
-     sizeInfo       <- TP.liftEither $ getSizeInfo torrentContent
-     ipsAndPorts    <- peersIpAndPortsFromTracker torrentContent
+  do torrentContent <- BP.parseFromFile tracker
+     pSize          <- TP.liftEither $ BP.piceSize torrentContent
+     pNLls          <- TP.liftEither $ BP.parsePathAndLenLs torrentContent
+     let sizeInfo = BP.makeSizeInfo pNLls pSize
+     TP.liftIO $ print "MK P"
+     ipsAndPorts    <- getPeers torrentContent
+     TP.liftIO $ print $ "DONE P " ++ (show $ length ipsAndPorts)
+
      infoHash       <- TP.liftEither $ BC.pack <$> BP.infoHash torrentContent
      pHashes        <- TP.liftEither $ BP.piecesHashSeq torrentContent
 
@@ -60,15 +65,34 @@ getSizeInfo torrentContent =
      return $ TP.getSizeData torrentSize pieceSize
 
 
+
+getPeers :: TorrentContent -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
+getPeers torrentContent =
+    do ann     <- TP.liftEither $ BP.annouce torrentContent
+       annType <- TP.liftEither $ BP.getAnnounce ann
+       case annType of
+           BP.HTTP tracker -> do
+               urlTracker <- TP.liftEither $ trackerUrl tracker torrentContent
+               TP.liftIO $ print urlTracker
+
+               resp       <- TP.liftIO . getResponseFromTracker $ urlTracker
+               parsedResp <- TP.liftEither $ (BP.parseFromBS . BC.pack $ resp)
+               peersBS    <- TP.liftEither $ BP.peers parsedResp
+               return $ getIPandPort peersBS
+
+           BP.UDP st -> return $ undefined
+{--
+
 peersIpAndPortsFromTracker :: TorrentContent
                            -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
 peersIpAndPortsFromTracker torrentContent =
     do urlTracker <- TP.liftEither $ trackerUrl torrentContent
+       TP.liftIO $ print urlTracker
        resp       <- TP.liftIO . getResponseFromTracker $ urlTracker
        peersBS    <- TP.liftEither $ (BP.parseFromBS . BC.pack $ resp) >>= BP.peers
        return $ getIPandPort peersBS
 
-
+--}
 type TrackerResponse = String
 type URL = String
 
@@ -79,9 +103,9 @@ getResponseFromTracker url =
     >>= HTTP.getResponseBody
 
 
-trackerUrl :: TorrentContent -> Either String URL
-trackerUrl fromDic =
-    do ann <- BP.annouce fromDic
+trackerUrl :: String -> TorrentContent -> Either String URL
+trackerUrl ann fromDic =
+    do --ann <- BP.annouce fromDic
        vars <- encodedVars <$> (BP.infoHash fromDic)
        return $ ann++"?"++vars
     where

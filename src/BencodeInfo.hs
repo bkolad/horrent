@@ -1,7 +1,9 @@
 {-# LANGUAGE RankNTypes #-}
 
+
 module BencodeInfo (BP.BEncode, annouce, infoHash, parseFromFile, parseFromBS,
-peers, piceSize, torrentSize, piecesHashSeq, torrentName) where
+peers, piceSize, torrentSize, piecesHashSeq, torrentName,
+parsePathAndLenLs, makeSizeInfo, getAnnounce, AnnounceType(..)) where
 
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -12,6 +14,7 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Crypto.Hash.SHA1 as SHA1 (hash)
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.Sequence as Seq
+import qualified Data.List as L
 
 import Data.Attoparsec.ByteString.Char8
 import Data.Either
@@ -25,14 +28,15 @@ import Control.Lens
 import qualified Data.Map as Map
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Class
+import Data.Monoid
 
 
 data DicInfo = Announce
              | PiecesHash
              | Peers
-             | PieceLength
+             | PieceSize
              | Info
-             | InfoLength
+             | SingleFile
              | Name
              | MultiFiles
              deriving Show
@@ -45,8 +49,8 @@ mkLens di =
         Peers       -> BP.keyL "peers"
         Info        -> infoLens
         PiecesHash  -> infoLens . BP.keyL "pieces"
-        PieceLength -> infoLens . BP.keyL "piece length"
-        InfoLength  -> infoLens . BP.keyL "length"
+        PieceSize   -> infoLens . BP.keyL "piece length"
+        SingleFile  -> infoLens . BP.keyL "length"
         Name        -> infoLens . BP.keyL "name"
         MultiFiles  -> infoLens . BP.keyL "files"
         where
@@ -64,6 +68,12 @@ genericGet dI lenS dic =
     in maybe (Left msg) Right ret
 
 
+
+isSingleFile :: BP.BEncode -> Bool
+isSingleFile dic =
+    let ret = dic ^? (mkLens SingleFile) . BP.bIntL
+    in maybe False (const True) ret
+
 annouce :: BP.BEncode -> Either String String
 annouce dic = BC.unpack <$> (genericGet Announce BP.bStrL dic)
 
@@ -77,11 +87,11 @@ piecesHash = genericGet PiecesHash BP.bStrL
 
 
 piceSize :: BP.BEncode -> Either String Int
-piceSize = genericGet PieceLength BP.bIntL
+piceSize = genericGet PieceSize BP.bIntL
 
 
 torrentSize :: BP.BEncode -> Either String Int
-torrentSize = genericGet InfoLength BP.bIntL
+torrentSize = genericGet SingleFile BP.bIntL
 
 
 infoHash :: BP.BEncode -> Either String String
@@ -113,10 +123,10 @@ piecesHashSeq :: BP.BEncode -> Either String HashInfo
 piecesHashSeq dic = (splitEvery 20) <$> piecesHash dic
 
 
-multiFiles :: BP.BEncode -> Either String [([BC.ByteString], Int)]
+multiFiles :: BP.BEncode -> Either String [(BC.ByteString, Int)]
 multiFiles dic = do
     filesBencode <- files dic
-    let fs =  (sequence . toPathLen . children) filesBencode
+    let fs =   (sequence . lsWordToPath. toPathLen . children) filesBencode
     maybe (Left "Wrong multi-files section in infodic") Right fs
 
 
@@ -128,17 +138,57 @@ parseFromFile path = do content <- liftIO $ B.readFile path
 parseFromBS :: B.ByteString -> Either String BP.BEncode
 parseFromBS x = P.parseOnly BP.bencodeParser x
 
-torrent = "Hunger.torrent"
+
+ubuntu = "/Users/blaze/Projects/Haskell/horrent/app/ub222.torrent"
 
 
-printer:: IO()
-printer = do content <- runExceptT $ parseFromFile torrent
-             case content of
-                  Left l ->
-                      print $ "Problem with reading torrent file" ++ (show l)
-                  Right dic ->
-                      print $ multiFiles dic
+st = runExceptT $
+    do  content <- parseFromFile torrent
+        pSize <- liftEither $ piceSize content
+        pNLls <- liftEither $ parsePathAndLenLs content
+        return $ makeSizeInfo pNLls pSize
 
+
+data AnnounceType = HTTP String | UDP String
+
+getAnnounce :: String -> Either String AnnounceType
+getAnnounce st =
+    if (L.isPrefixOf "http" st)
+        then return $ HTTP st
+        else if (L.isPrefixOf "udp" st)
+            then return $ UDP st
+            else Left "Announce type not recognized"
+
+
+makeSizeInfo :: [(BC.ByteString, Int)]
+             -> Int -> SizeInfo
+makeSizeInfo pNLls pSize =
+       let torrentSize = foldl (\acc (_, x) -> x + acc ) 0 pNLls
+           numberOfPieces =
+               ceiling $ (fromIntegral torrentSize) / (fromIntegral $ pSize)
+           lps = torrentSize `mod` pSize
+           lastPieceSize = if lps == 0 then pSize else lps
+        in
+           SizeInfo numberOfPieces pSize lastPieceSize
+
+
+parsePathAndLenLs :: BP.BEncode
+                  -> Either String [(BC.ByteString, Int)]
+parsePathAndLenLs content =
+        if (isSingleFile content)
+            then
+                do tName <- torrentName content
+                   tSize <- torrentSize content
+                   return [(tName, tSize)]
+            else
+                (multiFiles content)
+
+
+lsWordToPath ::  [Maybe ([BC.ByteString], Int)]
+             ->  [Maybe (BC.ByteString, Int)]
+lsWordToPath mLs = fmap (\m -> fmap concatPath m) mLs
+    where
+        concatPath (ls, i) = (B.concat ls, i)
 
 
 toPathLen :: [BP.BEncode] -> [Maybe ([BC.ByteString], Int)]
@@ -146,3 +196,13 @@ toPathLen ls =
     let path = BP.keyL "path" . BP.listL . traverse . BP.bStrL
         len  = BP.keyL "length" . BP.bIntL
     in map (\dic -> sequence (dic ^.. path, dic ^? len)) ls
+
+
+
+printer:: IO()
+printer = do content <- runExceptT $ parseFromFile ubuntu
+             case content of
+                  Left l ->
+                      print $ "Problem with reading torrent file" ++ (show l)
+                  Right dic ->
+                      print $ dic

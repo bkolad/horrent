@@ -13,13 +13,15 @@ qcProp :: QC.Property
 qcProp  = QC.forAll sortedPosLsNub
             (\ls -> intLsToIntLs ls == P.rmdups ls)
 
-qcTest :: TestTree
-qcTest = QC.testProperty "QC test convert [Int] to BS and back " qcProp
-
 sortedPosLsNub :: QC.Gen [Int]
 sortedPosLsNub = do
     l <-  QC.arbitrary
     return $ L.sort (abs <$>l)
+
+
+qcTest :: TestTree
+qcTest = QC.testProperty "QC test convert [Int] to BS and back " qcProp
+
 
 huTest :: TestTree
 huTest = THU.testCase "HUnit test" $

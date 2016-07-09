@@ -4,4 +4,6 @@ packages:
 extra-deps: #[]
 - directory-1.2.5.1
 - tasty-hunit-adapter-1.1
-resolver: lts-5.8
+- conduit-merge-0.1.2.0
+- binary-0.8.2.1 
+resolver: lts-6.6
