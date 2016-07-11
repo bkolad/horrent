@@ -1,9 +1,22 @@
 {-# LANGUAGE RankNTypes #-}
 
 
-module Bencode.BInfo (BP.BEncode, annouce, infoHash, parseFromFile, parseFromBS,
-peers, piceSize, torrentSize, piecesHashSeq, torrentName,
-parsePathAndLenLs, makeSizeInfo, getAnnounce, AnnounceType(..), parseUDPAnnounce) where
+module Bencode.BInfo
+    ( BP.BEncode
+    , AnnounceType(..)
+    , annouce
+    , infoHash
+    , parseFromFile
+    , parseFromBS
+    , peers
+    , piceSize
+    , torrentSize
+    , piecesHashSeq
+    , torrentName
+    , parsePathAndLenLs
+    , makeSizeInfo
+    , getAnnounce
+    , parseUDPAnnounce) where
 
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -95,9 +108,9 @@ torrentSize = genericGet SingleFile BP.bIntL
 
 
 infoHash :: BP.BEncode -> Either String String
-infoHash dic = fun <$> (genericGet Info BP.idL dic)
+infoHash dic = fun <$> genericGet Info BP.idL dic
     where
-        fun = BC.unpack . SHA1.hash . BP.toByteString
+        fun = BC.unpack . SHA1.hash . BP.bencode2ByteString
 
 
 info :: BP.BEncode -> Either String String

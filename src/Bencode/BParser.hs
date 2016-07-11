@@ -1,25 +1,25 @@
 {-# LANGUAGE RankNTypes #-}
 
-module Bencode.BParser ( BEncode
-                     , bStrL
-                     , bIntL
-                     , keyL
-                     , idL
-                     , toByteString
-                     , bencodeParser
-                     , listL
-                     , uDPAnnounceParser
-                     ) where
+module Bencode.BParser
+    ( BEncode
+    , bStrL
+    , bIntL
+    , keyL
+    , idL
+    , bencode2ByteString
+    , bencodeParser
+    , listL
+    , uDPAnnounceParser
+    ) where
 
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.Map as Map
 import Data.Attoparsec.ByteString.Char8 as P
-import Control.Applicative
-import Control.Lens
-import qualified Data.Attoparsec.Text as AT
-import qualified Data.Text as T
+import Control.Applicative ((<*>), (<|>))
+import Control.Lens --(Prism', prism, para)
+
 
 
 data BEncode = BStr BC.ByteString
@@ -29,17 +29,18 @@ data BEncode = BStr BC.ByteString
              deriving (Eq, Show, Ord)
 
 
-
 instance Plated BEncode where
     plate f ec =
         case ec of
-            (BList ls) -> BList <$> (traverse f ls)
+            (BList ls) -> BList <$> traverse f ls
             (BDic dic) -> BDic <$> tvk f dic
             k -> pure k
         where
-            tvk fun dic = Map.fromList <$> (traverse (cvt fun) (Map.toList dic))
-            cvt fun (k, v) = (,) <$>(fun k) <*> (fun v)
+            tvk fun dic =
+                Map.fromList <$> traverse (cvt fun) (Map.toList dic)
 
+            cvt fun (k, v) =
+                (,) <$> fun k <*> fun v
 
 
 idL :: Prism' BEncode BEncode
@@ -108,11 +109,14 @@ dicEntry = (,) <$> bStr <*> bencodeParser
 bDic :: Parser BEncode
 bDic = BDic . Map.fromList <$> (char 'd' *> many1 dicEntry <* char 'e')
 
+
 bencodeParser :: Parser BEncode
 bencodeParser = bInt <|> bStr <|> bList <|> bDic
 
 
-toByteString dic = para convertToBS dic
+bencode2ByteString :: BEncode -> BC.ByteString
+bencode2ByteString dic = para convertToBS dic
+
 
 convertToBS :: BEncode -> [BC.ByteString] -> BC.ByteString
 convertToBS dic kls =
@@ -123,15 +127,10 @@ convertToBS dic kls =
         (BDic dic) -> B.concat [BC.pack "d", B.concat kls, BC.pack "e"]
 
 
---udp = BC.pack "udp://tracker.opentrackr.org:1337/announce"
---xx = parseUDPAnnounce udp
-
-
-
 uDPAnnounceParser :: Parser (BC.ByteString, BC.ByteString)
 uDPAnnounceParser = do
-    udpH <- (string $ BC.pack "udp://")
-            *> (P.takeWhile (\c -> c /= ':'))
+    udpH <- string (BC.pack "udp://")
+            *> P.takeWhile (/= ':')
             <* char ':'
     port <- num
     return (udpH ,BC.pack port)
