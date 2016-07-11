@@ -78,7 +78,7 @@ getPeers torrentContent =
                TP.liftIO $ print urlTracker
 
                resp       <- TP.liftIO . getResponseFromTracker $ urlTracker
-               parsedResp <- TP.liftEither $ (BP.parseFromBS . BC.pack $ resp)
+               parsedResp <- TP.liftEither $ (BP.parse2BEncode . BC.pack $ resp)
                peersBS    <- TP.liftEither $ BP.peers parsedResp
                return $ getIPandPort peersBS
 

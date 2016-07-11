@@ -7,7 +7,7 @@ module Bencode.BParser
     , keyL
     , idL
     , bencode2ByteString
-    , bencodeParser
+    , parse2BEncode
     , listL
     , uDPAnnounceParser
     ) where
@@ -113,6 +113,9 @@ bDic = BDic . Map.fromList <$> (char 'd' *> many1 dicEntry <* char 'e')
 bencodeParser :: Parser BEncode
 bencodeParser = bInt <|> bStr <|> bList <|> bDic
 
+
+parse2BEncode :: BC.ByteString -> Either String BEncode
+parse2BEncode = P.parseOnly bencodeParser
 
 bencode2ByteString :: BEncode -> BC.ByteString
 bencode2ByteString dic = para convertToBS dic

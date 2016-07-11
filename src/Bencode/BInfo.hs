@@ -1,13 +1,12 @@
 {-# LANGUAGE RankNTypes #-}
 
-
 module Bencode.BInfo
     ( BP.BEncode
     , AnnounceType(..)
     , annouce
     , infoHash
     , parseFromFile
-    , parseFromBS
+    , BP.parse2BEncode
     , peers
     , piceSize
     , torrentSize
@@ -18,8 +17,6 @@ module Bencode.BInfo
     , getAnnounce
     , parseUDPAnnounce) where
 
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 import qualified Data.Attoparsec.ByteString as P
 import qualified Data.ByteString as B
@@ -42,6 +39,7 @@ import qualified Data.Map as Map
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.Class
 import Data.Monoid
+import Data.Maybe (isJust)
 
 
 data DicInfo = Announce
@@ -72,12 +70,12 @@ mkLens di =
 
 
 filesLs :: Prism' BP.BEncode BP.BEncode
-filesLs = (BP.keyL "info") . (BP.keyL "files")
+filesLs = BP.keyL "info" . BP.keyL "files"
 
 
 genericGet dI lenS dic =
     let ret = dic ^? (mkLens dI) . lenS
-        msg = "Bencode parsing error: Missing " ++ (show dI)
+        msg = "Bencode parsing error: Missing " ++ show dI
     in maybe (Left msg) Right ret
 
 
@@ -85,10 +83,10 @@ genericGet dI lenS dic =
 isSingleFile :: BP.BEncode -> Bool
 isSingleFile dic =
     let ret = dic ^? (mkLens SingleFile) . BP.bIntL
-    in maybe False (const True) ret
+    in isJust ret--maybe False (const True) ret
 
 annouce :: BP.BEncode -> Either String BC.ByteString--String
-annouce dic = (genericGet Announce BP.bStrL dic)
+annouce = genericGet Announce BP.bStrL
 
 
 peers :: BP.BEncode -> Either String BC.ByteString
@@ -114,11 +112,11 @@ infoHash dic = fun <$> genericGet Info BP.idL dic
 
 
 info :: BP.BEncode -> Either String String
-info dic = show <$> (genericGet Info BP.idL dic)
+info dic = show <$> genericGet Info BP.idL dic
 
 
 files :: BP.BEncode -> Either String BP.BEncode
-files dic = (genericGet MultiFiles BP.idL dic)
+files = genericGet MultiFiles BP.idL
 
 
 torrentName :: BP.BEncode -> Either String BC.ByteString
@@ -126,14 +124,14 @@ torrentName = genericGet Name BP.bStrL
 
 
 splitEvery :: Int -> BC.ByteString -> HashInfo
-splitEvery n bc = if (BC.null bc)
+splitEvery n bc = if BC.null bc
                      then Seq.empty
-                     else s Seq.<| (splitEvery n e)
+                     else s Seq.<| splitEvery n e
                   where (s,e) = BC.splitAt n bc
 
 
 piecesHashSeq :: BP.BEncode -> Either String HashInfo
-piecesHashSeq dic = (splitEvery 20) <$> piecesHash dic
+piecesHashSeq dic = splitEvery 20 <$> piecesHash dic
 
 
 multiFiles :: BP.BEncode -> Either String [(BC.ByteString, Int)]
@@ -145,11 +143,7 @@ multiFiles dic = do
 
 parseFromFile :: String ->  ExceptT String IO BP.BEncode
 parseFromFile path = do content <- liftIO $ B.readFile path
-                        liftEither $ P.parseOnly BP.bencodeParser content
-
-
-parseFromBS :: B.ByteString -> Either String BP.BEncode
-parseFromBS x = P.parseOnly BP.bencodeParser x
+                        liftEither $ BP.parse2BEncode content
 
 
 ubuntu = "/Users/blaze/Projects/Haskell/horrent/app/ub222.torrent"
