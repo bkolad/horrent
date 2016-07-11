@@ -1,7 +1,7 @@
 module ParserTests (testAllTorrents) where
 
-import qualified BencodeInfo as BP
-import qualified BencodeParser as BP
+import qualified Bencode.BInfo as BP
+import qualified Bencode.BParser as BP
 import Control.Monad.Except (ExceptT, liftIO, runExceptT)
 import qualified System.Directory as Dir
 import qualified Data.List as L
