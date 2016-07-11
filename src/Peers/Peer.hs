@@ -1,4 +1,4 @@
-module Peer ( fromBsToInt
+module Peers.Peer ( fromBsToInt
             , pieceLsToBS
             , bsToPieceLs
             , Peer (..)

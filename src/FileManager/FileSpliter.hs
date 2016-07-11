@@ -3,7 +3,7 @@
 
 {-# LANGUAGE RankNTypes #-}
 
-module FileSpliter where
+module FileManager.FileSpliter where
 
 import System.Directory (getDirectoryContents)
 import Data.List.Ordered

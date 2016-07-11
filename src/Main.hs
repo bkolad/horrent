@@ -4,7 +4,7 @@ import Types
 import System.Directory
 import Data.List.Ordered
 import qualified Data.List as L
-import qualified PeersControlerN as PC
+import qualified Peers.PeersControlerN as PC
 import qualified Control.Monad as M
 import qualified Data.ByteString as B
 

@@ -3,7 +3,7 @@ module TubeTest where
 import qualified Data.ByteString.Char8 as BC
 import qualified PeersControlerSimulator as S
 import qualified Types as TP
-import qualified InterpretST as IPST
+import qualified Interpreter.ST as IPST
 import qualified Data.List as L
 import qualified Data.ByteString as B
 import qualified Test.Tasty.HUnit as THU

@@ -1,11 +1,11 @@
 
 {-# LANGUAGE ScopedTypeVariables, OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
-module PeersControlerN where
+module Peers.PeersControlerN where
 
 import qualified Tracker.Connector as CN (makePeers)
 import Control.Monad.Except (ExceptT, liftIO, runExceptT)
-import qualified Peer as P
+import qualified Peers.Peer as P
 import qualified StaticQ as SQ
 import qualified Data.Conduit.Network as CN
 import Data.Conduit
@@ -13,12 +13,12 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Types as TP
 import qualified Data.ByteString as B
 
-import qualified TubeDSL as T
-import qualified Message as M
-import qualified InterpretIO as IPIO
+import qualified Interpreters.TubeDSL as T
+import qualified Peers.Message as M
+import qualified Interpreters.IO as IPIO
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
-import Action
+import Interpreters.Action
 import Control.Monad.Trans.Class (lift)
 import qualified Control.Monad as M
 import Control.Exception

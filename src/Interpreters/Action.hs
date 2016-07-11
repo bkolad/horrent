@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
 
-module Action ( ActionF (..)
+module Interpreters.Action ( ActionF (..)
               , setStatusF
               , sendInterestedF
               , logF

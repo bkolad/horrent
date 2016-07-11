@@ -1,9 +1,9 @@
 {-# LANGUAGE FlexibleContexts, RankNTypes #-}
 
-module  PeersControlerSimulator (runSimulation)
+module Peers.PeersControlerSimulator (runSimulation)
     where
 
-import qualified InterpretST as IPST
+import qualified Interpreter.ST as IPST
 
 import Control.Monad.State.Strict
 import Control.Monad.Reader.Class

@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module InterpretST  where
+module Interpreters.ST  where
 
 import Control.Monad.State.Strict
 import Control.Monad.Reader.Class
@@ -63,7 +63,7 @@ interpret sizeInfo program =
             interpret sizeInfo c
 
         Free (SetStatus x status c) ->
-            do  
+            do
                 modify (\st -> st {global = S.update x status (global st)})
                 interpret sizeInfo c
 

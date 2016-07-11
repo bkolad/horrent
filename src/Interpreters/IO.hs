@@ -1,11 +1,11 @@
 {-# LANGUAGE ScopedTypeVariables, FlexibleContexts #-}
-module InterpretIO ( InterpreterEnv (..)
+module Interpreters.IO ( InterpreterEnv (..)
                    , interpret
                    ) where
 
 import Data.Conduit
 import qualified Data.Conduit.List as CL
-import qualified Message as M
+import qualified Peers.Message as M
 import qualified Data.ByteString.Char8 as BC
 import qualified Types as TP
 import qualified Data.Array.MArray as MA
@@ -24,7 +24,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 
 
-import Action
+import Interpreters.Action
 
 data InterpreterEnv =
     InterpreterEnv { appData  :: SN.AppData

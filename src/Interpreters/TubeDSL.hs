@@ -1,6 +1,6 @@
 -- {-# LANGUAGE FlexibleInstances #-}
 
-module TubeDSL ( sendHandshake
+module Interpreters.TubeDSL ( sendHandshake
                , recHandshake
                , decodeMessage
                , recMessage
@@ -10,17 +10,17 @@ module TubeDSL ( sendHandshake
 import Data.Conduit
 import qualified Data.Conduit.List as CL
 
-import qualified Message as M
-import qualified Handshake as H
+import qualified Peers.Message as M
+import qualified Peers.Handshake as H
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import qualified Peer as P
+import qualified Peers.Peer as P
 import qualified Data.Sequence as Seq
 import qualified Types as TP
 import qualified Data.Binary.Get as G
 import Control.Monad.Trans.Class (lift)
 import qualified Data.Conduit.Network as CN
-import Action
+import Interpreters.Action
 
 
 data Exec = LastPiece

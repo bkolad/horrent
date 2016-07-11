@@ -2,15 +2,15 @@
 
 module Tracker.Connector (makePeers) where
 
-import qualified Peer as P
+import qualified Peers.Peer as P
 import qualified Bencode.BInfo as BP
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
-import qualified UrlEncoder as Encoder (urlEncodeVars)
+import qualified Tracker.UrlEncoder as Encoder (urlEncodeVars)
 import qualified Data.Either as DE
 import qualified Network as N
-import qualified Handshake as H
+import qualified Peers.Handshake as H
 import qualified Data.Traversable as T
 import Data.Binary.Get
 import Data.Word

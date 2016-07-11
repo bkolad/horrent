@@ -1,4 +1,4 @@
-module Message where
+module Peers.Message where
 
 -- import qualified Peer as P (Peer, makePeer, showPeer, fromBsToInt, handleP)
 import qualified Data.ByteString as B
