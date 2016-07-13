@@ -79,3 +79,28 @@ testAllTorrents = do
 
 
 main = testAllTorrents >>= defaultMain
+
+
+{--
+ubuntu = "/Users/blaze/Projects/Haskell/horrent/app/ub222.torrent"
+
+
+st = runExceptT $
+    do  content <- parseFromFile ubuntu
+        pSize <- liftEither $ piceSize content
+        pNLls <- liftEither $ parsePathAndLenLs content
+        return $ makeSizeInfo pNLls pSize
+
+
+
+
+        printer:: IO()
+        printer = do content <- runExceptT $ parseFromFile ubuntu
+                     case content of
+                          Left l ->
+                              print $ "Problem with reading torrent file" ++ (show l)
+                          Right dic ->
+                              print $ dic
+
+
+--}

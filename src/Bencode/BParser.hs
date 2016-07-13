@@ -9,7 +9,7 @@ module Bencode.BParser
     , bencode2ByteString
     , parse2BEncode
     , listL
-    , uDPAnnounceParser
+    , parseUDPAnnounce
     ) where
 
 
@@ -128,6 +128,11 @@ convertToBS dic kls =
         (BStr  bs) -> B.concat [BC.pack $ show (B.length bs) ++ ":", bs]
         (BList ls) -> B.concat [BC.pack "l", B.concat kls, BC.pack "e"]
         (BDic dic) -> B.concat [BC.pack "d", B.concat kls, BC.pack "e"]
+
+
+parseUDPAnnounce :: BC.ByteString
+                 -> Either String (BC.ByteString, BC.ByteString)
+parseUDPAnnounce = parseOnly uDPAnnounceParser
 
 
 uDPAnnounceParser :: Parser (BC.ByteString, BC.ByteString)

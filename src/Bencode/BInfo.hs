@@ -15,31 +15,20 @@ module Bencode.BInfo
     , parsePathAndLenLs
     , makeSizeInfo
     , getAnnounce
-    , parseUDPAnnounce) where
+    , BP.parseUDPAnnounce) where
 
 
-import qualified Data.Attoparsec.ByteString as P
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Crypto.Hash.SHA1 as SHA1 (hash)
-import qualified Data.ByteString.Base16 as B16
 import qualified Data.Sequence as Seq
-import qualified Data.List as L
-
-import Data.Attoparsec.ByteString.Char8
-import Data.Either
-import Control.Applicative
+import qualified Bencode.BParser as BP
+import qualified Data.Map as Map
+import Data.Maybe (isJust)
 import Control.Monad (join)
 
 import Types
-import Debug.Trace
-import qualified Bencode.BParser as BP
 import Control.Lens
-import qualified Data.Map as Map
-import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.Class
-import Data.Monoid
-import Data.Maybe (isJust)
 
 
 data DicInfo = Announce
@@ -77,7 +66,6 @@ genericGet dI lenS dic =
     let ret = dic ^? (mkLens dI) . lenS
         msg = "Bencode parsing error: Missing " ++ show dI
     in maybe (Left msg) Right ret
-
 
 
 isSingleFile :: BP.BEncode -> Bool
@@ -146,20 +134,9 @@ parseFromFile path = do content <- liftIO $ B.readFile path
                         liftEither $ BP.parse2BEncode content
 
 
-ubuntu = "/Users/blaze/Projects/Haskell/horrent/app/ub222.torrent"
-
-
-st = runExceptT $
-    do  content <- parseFromFile ubuntu
-        pSize <- liftEither $ piceSize content
-        pNLls <- liftEither $ parsePathAndLenLs content
-        return $ makeSizeInfo pNLls pSize
-
-
-
-
 data AnnounceType = HTTP  BC.ByteString | UDP  BC.ByteString
 
+{--
 getAnnounce :: BC.ByteString -> Either String AnnounceType
 getAnnounce st =
     if (BC.isPrefixOf (BC.pack("http")) st)
@@ -167,9 +144,16 @@ getAnnounce st =
         else if (BC.isPrefixOf (BC.pack "udp") st)
             then return $ UDP st
             else Left "Announce type not recognized"
+--}
 
-
-parseUDPAnnounce st = parseOnly BP.uDPAnnounceParser st
+getAnnounce :: BC.ByteString -> Either String AnnounceType
+getAnnounce st
+    | BC.isPrefixOf (BC.pack "http") st =
+        return $ HTTP st
+    | BC.isPrefixOf (BC.pack "udp") st =
+        return $ UDP st
+    | otherwise =
+        Left "Announce type not recognized"
 
 
 makeSizeInfo :: [(BC.ByteString, Int)]
@@ -177,7 +161,7 @@ makeSizeInfo :: [(BC.ByteString, Int)]
 makeSizeInfo pNLls pSize =
        let torrentSize = foldl (\acc (_, x) -> x + acc ) 0 pNLls
            numberOfPieces =
-               ceiling $ (fromIntegral torrentSize) / (fromIntegral $ pSize)
+               ceiling $ (fromIntegral torrentSize) / (fromIntegral pSize)
            lps = torrentSize `mod` pSize
            lastPieceSize = if lps == 0 then pSize else lps
         in
@@ -187,18 +171,18 @@ makeSizeInfo pNLls pSize =
 parsePathAndLenLs :: BP.BEncode
                   -> Either String [(B.ByteString, Int)]
 parsePathAndLenLs content =
-        if (isSingleFile content)
+        if isSingleFile content
             then
                 do tName <- torrentName content
                    tSize <- torrentSize content
                    return [(tName, tSize)]
             else
-                (multiFiles content)
+                multiFiles content
 
 
 lsWordToPath ::  [Maybe ([BC.ByteString], Int)]
              ->  [Maybe (BC.ByteString, Int)]
-lsWordToPath mLs = fmap (\m -> fmap concatPath m) mLs
+lsWordToPath mLs = fmap (fmap concatPath) mLs
     where
         concatPath (ls, i) = (B.concat ls, i)
 
@@ -208,13 +192,3 @@ toPathLen ls =
     let path = BP.keyL "path" . BP.listL . traverse . BP.bStrL
         len  = BP.keyL "length" . BP.bIntL
     in map (\dic -> sequence (dic ^.. path, dic ^? len)) ls
-
-
-
-printer:: IO()
-printer = do content <- runExceptT $ parseFromFile ubuntu
-             case content of
-                  Left l ->
-                      print $ "Problem with reading torrent file" ++ (show l)
-                  Right dic ->
-                      print $ dic
