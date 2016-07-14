@@ -18,7 +18,7 @@ data Handshake = Handshake { len :: Int
                            }
 
 instance Show Handshake where
-  show h = peerName h
+  show = peerName
 
 myId = "-TR2840-d0p22uiake0b"
 protocol = "BitTorrent protocol"
@@ -26,13 +26,13 @@ protocol = "BitTorrent protocol"
 instance Binary Handshake where
 
   put handshake = putWord8 (fromIntegral . length $ protocol)
-               >> (putByteString $ BC.pack protocol)
-               >> (putWord64be 0)
-               >> (putByteString $ hash handshake)
-               >> (putByteString $ BC.pack $ peerName handshake)
+               >> putByteString (BC.pack protocol)
+               >> putWord64be 0
+               >> putByteString (hash handshake)
+               >> putByteString (BC.pack $ peerName handshake)
 
 
-  get = do len <- (P.fromBsToInt <$> getByteString 1)
+  get = do len <- P.fromBsToInt <$> getByteString 1
            ptr <- BC.unpack <$> getByteString len
            rsrv <- getByteString 8
            hash <- getByteString 20
@@ -58,7 +58,7 @@ decodeHandshake bs =  decodeOrFail $ BL.fromStrict bs
 convertParsedOutput ::
   Either (BL.ByteString , ByteOffset, String) (BL.ByteString, ByteOffset, Handshake)
   -> TP.Perhaps (BC.ByteString, Handshake)
-convertParsedOutput x = do
+convertParsedOutput x =
   case x of
-    Left (_, _, e) -> Left $ "Problem with parsing handshake " ++ (show e)
-    Right (leftOver, _, h) ->  Right $ (BL.toStrict leftOver,  h)
+    Left (_, _, e) -> Left $ "Problem with parsing handshake " ++ show e
+    Right (leftOver, _, h) ->  Right (BL.toStrict leftOver,  h)
