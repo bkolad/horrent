@@ -27,21 +27,6 @@ import qualified Control.Concurrent.STM as STM
 
 import Control.Monad.Reader
 
-{--
-OG:: Next 489 ThreadId 330"
-"LOG:: GOT Piece 486 2080768 ThreadId 330"
-"LOG:: HashEQ True 2097152 ThreadId 333"
-"LOG:: Next 489 ThreadId 333"
-"LOG:: GOT Piece 488 2080768 ThreadId 333"
-"LOG:: HashEQ True 2097152 ThreadId 324"
-"LOG:: EXIT ThreadId 324"
-"LOG:: GOT LAST Piece 487 2080768 ThreadId 324" --}
---118
---SizeInfo {numberOfPieces = 490, normalPieceSize = 2097152, lastPieceSize = 1064978}
-
-
---mos2
---SizeInfo {numberOfPieces = 933, normalPieceSize = 4194304, lastPieceSize = 3156619}
 
 startM tracker =
      do (peers, sizeInfo, fN)  <-  CN.makePeers tracker
@@ -79,14 +64,14 @@ data PeerStatus = OK
 
 
 runClientSafe ::  TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO PeerStatus
-runClientSafe globalStatus sizeInfo peer = do
+runClientSafe globalStatus sizeInfo peer =
     catches (runClient globalStatus sizeInfo peer)
           [ tubeExceptionHandler globalStatus
           , ioExceptionHandler peer ]
 
 
 tubeExceptionHandler globalStatus =
-    Handler $ handle
+    Handler handle
     where
         handle (TP.PeerException e host iM) =
             case iM of
@@ -99,7 +84,7 @@ tubeExceptionHandler globalStatus =
 
 ioExceptionHandler peer =
     Handler (\ (SomeException ex) ->
-        return $ HandShakeError ((P.hostName peer)++" "++show ex))
+        return $ HandShakeError (P.hostName peer++" "++show ex))
 
 
 setStatusNotHave :: Int -> TP.GlobalPiceInfo -> IO()
@@ -124,7 +109,7 @@ runClient globalStatus sizeInfo peer = CN.runTCPClient
                                           , IPIO.sizeInfo = sizeInfo
                                           , IPIO.peerSink = peerSink
                                           , IPIO.pending  = Nothing
-                                          , IPIO.host     = (P.hostName peer)
+                                          , IPIO.host     = P.hostName peer
                                           }
 
             runReaderT (IPIO.interpret action) env
@@ -147,11 +132,11 @@ tube peer getFrom  = do
           return $ HandShakeError msg
 
       Right (bitFieldLeftOver, hand) -> do
-          let gg = ((T.flushLeftOver bitFieldLeftOver)
+          let gg = T.flushLeftOver bitFieldLeftOver
                 =$=  T.decodeMessage M.getMessage
-                =$=  T.recMessage peer)
+                =$=  T.recMessage peer
 
-          (nextSource $=+ gg $$+- saveToFile)
+          nextSource $=+ gg $$+- saveToFile
 
 
 
@@ -160,7 +145,7 @@ appSource :: Source Action B.ByteString
 appSource =
     loop
   where
-    read' = readDataWithTimeoutF (100000000)
+    read' = readDataWithTimeoutF 100000000
     loop = do
         bs <- lift read'
         unless (B.null bs) $ do
@@ -168,7 +153,7 @@ appSource =
             loop
 
 
-saveToFile :: Sink ((String, BC.ByteString)) Action PeerStatus
+saveToFile :: Sink (String, BC.ByteString) Action PeerStatus
 saveToFile = do
     --ll <- appSource
     mX <- await

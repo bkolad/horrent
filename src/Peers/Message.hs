@@ -1,6 +1,9 @@
-module Peers.Message where
+module Peers.Message
+    ( Message(..)
+    , encodeMessage
+    , getMessage
+    ) where
 
--- import qualified Peer as P (Peer, makePeer, showPeer, fromBsToInt, handleP)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified System.IO as SIO
@@ -43,22 +46,22 @@ instance Binary Message where
                                                           >> put32Int o
                                                           >> put32Int l
 
-   put (Bitfield bs)       = put32Int (1 + (B.length bs)) >> putWord8 5
+   put (Bitfield bs)       = put32Int (1 + B.length bs) >> putWord8 5
                                                           >> putByteString bs
 
-   put (Piece (i, o, bs))   = put32Int (9 + (B.length bs)) >> putWord8 7
+   put (Piece (i, o, bs))   = put32Int (9 + B.length bs) >> putWord8 7
                                                            >> put32Int i
                                                            >> put32Int o
                                                            >> putByteString bs
 
    put Cancel              = putWord32be 13 >> putWord8 8
    put Port                = putWord32be 3 >> putWord8 9
-   put (Unknown _ _)       = undefined
+   put (Unknown _ _)       = error "unknown" --undefined
 
 
    get = do
             numBytes <- fromIntegral <$> getWord32be
-            if (numBytes == 0)
+            if numBytes == 0
                then return KeepAlive
                else do idx <- fromIntegral <$>  getWord8
 
@@ -74,8 +77,8 @@ instance Binary Message where
                              5 -> return $ Bitfield bs
                              6 -> return $ Request (toRequest bs)
                              7 -> return $ Piece (toPiece bs)
-                             8 -> return $ Cancel
-                             9 -> return $ Port
+                             8 -> return Cancel
+                             9 -> return Port
                              x -> return $ Unknown (fromIntegral size) (fromIntegral x)
 
 
@@ -89,8 +92,6 @@ toRequest bs = runGet get (BL.fromChunks [bs])
        return (idx, chunk, size)
 
 
-
-
 put32Int = putWord32be . fromIntegral
 
 toPiece bs = runGet getTripplet (BL.fromChunks [bs])
@@ -102,15 +103,14 @@ toPiece bs = runGet getTripplet (BL.fromChunks [bs])
            return (numBytes, begin, (B.concat . BL.toChunks) rest)
 
 
-
 getFullMessage ::
    B.ByteString
   -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Message)
 getFullMessage bs = decodeOrFail $ BL.fromStrict bs
 
+
 getMessage :: Decoder Message
 getMessage = runGetIncremental get
-
 
 
 encodeMessage :: Message -> B.ByteString

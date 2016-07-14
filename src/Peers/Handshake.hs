@@ -40,19 +40,16 @@ instance Binary Handshake where
            return $ Handshake len ptr rsrv hash peer
 
 
-
 createHandshake :: B.ByteString -> B.ByteString
 createHandshake hash = BL.toStrict . encode $ Handshake len protocol rsrv hash myId
     where  len = length protocol
            rsrv = B.replicate 8 0
 
 
-
 decodeHandshake ::
   B.ByteString
   -> Either (BL.ByteString, ByteOffset, String) (BL.ByteString, ByteOffset, Handshake)
 decodeHandshake bs =  decodeOrFail $ BL.fromStrict bs
-
 
 
 convertParsedOutput ::

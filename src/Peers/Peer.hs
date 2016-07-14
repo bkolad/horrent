@@ -1,10 +1,11 @@
-module Peers.Peer ( fromBsToInt
-            , pieceLsToBS
-            , bsToPieceLs
-            , Peer (..)
-            , hashFor
-            , rmdups
-            , fromIntToBs) where
+module Peers.Peer
+    ( fromBsToInt
+    , pieceLsToBS
+    , bsToPieceLs
+    , Peer (..)
+    , hashFor
+    , rmdups
+    , fromIntToBs) where
 
 import qualified Data.Bits as Bits
 import qualified Data.ByteString as B
@@ -24,12 +25,11 @@ data Peer = Peer { hostName :: N.HostName
                  , unChoked :: Bool
                  , buffer :: B.ByteString
                  , pieceHashes :: TP.HashInfo
-            --     , pendingPiece :: Maybe Int
                  }
 
 
 instance Show Peer where
-  show p = (hostName p) ++ " "++ (show $ port p) ++ " " ++ (show $ pieces p)
+  show p = hostName p ++ " "++ show (port p) ++ " " ++ show (pieces p)
 
 fromIntToBs :: Int -> B.ByteString
 fromIntToBs i = B.pack [fromIntegral i]
@@ -51,13 +51,13 @@ fillEmptyKyes ::  Map.Map Int W.Word8 -> Map.Map Int W.Word8
 fillEmptyKyes m =  L.foldl' fillEmpty m getLs
     where
         fillEmpty acc k = Map.insertWith (+) k 0 acc
-        getLs = case Map.null m of
-                    True -> []
-                    _    -> let (maxK, _) = Map.findMax m
-                            in [0 .. maxK]
+        getLs = if Map.null m
+                    then []
+                    else let (maxK, _) = Map.findMax m
+                         in [0 .. maxK]
 
 mkMap :: [Int] -> Map.Map Int W.Word8
-mkMap ls = L.foldl' toMap Map.empty ls
+mkMap = L.foldl' toMap Map.empty
     where
         toMap acc x =
             let k = div x 8

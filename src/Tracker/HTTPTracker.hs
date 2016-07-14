@@ -1,0 +1,50 @@
+module Tracker.HTTPTracker where
+
+import qualified Tracker.UrlEncoder as Encoder (urlEncodeVars)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Lazy as BL
+import qualified Peers.Handshake as H
+import qualified Bencode.BInfo as BI
+import qualified Network as N
+import qualified Types as TP
+
+import Tracker.TrackerUtils (getIPandPort)
+import Network.HTTP.Base (urlEncodeVars)
+import Network.HTTP as HTTP
+import Data.Binary.Get
+
+
+getHostsAndIps :: BC.ByteString
+               -> String
+               ->  BI.BEncode
+               -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
+getHostsAndIps tracker infoH torrentContent = do
+    url        <- TP.liftEither $ trackerUrl tracker infoH torrentContent
+    rsp        <- TP.liftIO $ getResponseFromTracker url
+    parsedResp <- TP.liftEither $ BI.parse2BEncode . BC.pack $ rsp
+    peersBS    <- TP.liftEither $ BI.peers parsedResp
+    return $ getIPandPort peersBS
+
+
+
+getResponseFromTracker :: String -> IO String
+getResponseFromTracker url =
+    HTTP.simpleHTTP (HTTP.getRequest url)
+    >>= HTTP.getResponseBody
+
+
+trackerUrl :: BC.ByteString -> String ->  BI.BEncode -> Either String String
+trackerUrl ann infoHash romDic = do
+    let vars = encodedVars infoHash
+    return $ BC.unpack ann ++ "?" ++ vars
+   where
+        encodedVars hash =
+            Encoder.urlEncodeVars [("info_hash", hash),
+                                   ("peer_id", H.myId),
+                                   ("left", "1000000000"),
+                                   ("port", "6881"),
+                                   ("compact", "1"),
+                                   ("uploaded", "0"),
+                                   ("downloaded", "0"),
+                                   ("event", "started")]
