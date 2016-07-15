@@ -32,12 +32,13 @@ instance Binary Handshake where
                >> putByteString (BC.pack $ peerName handshake)
 
 
-  get = do len <- P.fromBsToInt <$> getByteString 1
-           ptr <- BC.unpack <$> getByteString len
-           rsrv <- getByteString 8
-           hash <- getByteString 20
-           peer <- BC.unpack <$> getByteString 20
-           return $ Handshake len ptr rsrv hash peer
+  get = do
+      len <- P.fromBsToInt <$> getByteString 1
+      ptr <- BC.unpack <$> getByteString len
+      rsrv <- getByteString 8
+      hash <- getByteString 20
+      peer <- BC.unpack <$> getByteString 20
+      return $ Handshake len ptr rsrv hash peer
 
 
 createHandshake :: B.ByteString -> B.ByteString

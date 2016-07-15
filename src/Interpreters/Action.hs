@@ -11,7 +11,6 @@ module Interpreters.Action ( ActionF (..)
               , saveToFileF
               , getPendingPieceF
               , throwF
-            --  , registerLsF
               , Action
               , Free(Free,Pure)
               ) where
@@ -24,13 +23,13 @@ import qualified Data.ByteString as B
 
 data ActionF a = SendInterested a
                 | Log String a
-                | ReqNextAndUpdate [Int] ((Maybe Int) -> a)
+                | ReqNextAndUpdate [Int] (Maybe Int -> a)
                 | SendRequest (Int, Int, Int) a
                 | SetStatus Int TP.PiceInfo a
                 | ReqSizeInfo (TP.SizeInfo -> a)
                 | ReadData Int (B.ByteString -> a)
                 | SaveToFile String B.ByteString a
-                | GetPendingPiece ((Maybe Int) -> a)
+                | GetPendingPiece (Maybe Int -> a)
                 | UnChoke a
                 | Throw TP.ExeptionType a
                 deriving (Functor)
@@ -58,24 +57,26 @@ sendRequestF req = Free $ SendRequest req (Pure ())
 setStatusF :: Int -> TP.PiceInfo -> Action ()
 setStatusF x status = Free $ SetStatus x status (Pure ())
 
+
 getSizeInfoF :: Action TP.SizeInfo
 getSizeInfoF = Free $ ReqSizeInfo Pure
+
 
 readDataWithTimeoutF :: Int -> Action B.ByteString
 readDataWithTimeoutF t = Free $ ReadData t Pure
 
+
 saveToFileF :: String -> B.ByteString -> Action ()
 saveToFileF fN c = Free $ SaveToFile fN c (Pure ())
+
 
 getPendingPieceF :: Action (Maybe Int)
 getPendingPieceF = Free $ GetPendingPiece Pure
 
+
 unChokeF :: Action ()
 unChokeF = Free $ UnChoke (Pure ())
 
+
 throwF ::TP.ExeptionType ->  Action ()
 throwF x = Free $ Throw x (Pure ())
-
-
---registerLsF :: [Int] -> Action ()
---registerLsF ls = Free $ Ragister ls (Pure ())

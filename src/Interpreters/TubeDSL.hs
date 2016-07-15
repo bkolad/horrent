@@ -1,11 +1,10 @@
--- {-# LANGUAGE FlexibleInstances #-}
-
-module Interpreters.TubeDSL ( sendHandshake
-               , recHandshake
-               , decodeMessage
-               , recMessage
-               , flushLeftOver
-               ) where
+module Interpreters.TubeDSL
+    ( sendHandshake
+    , recHandshake
+    , decodeMessage
+    , recMessage
+    , flushLeftOver
+    ) where
 
 import Data.Conduit
 import qualified Data.Conduit.List as CL
@@ -19,7 +18,6 @@ import qualified Data.Sequence as Seq
 import qualified Types as TP
 import qualified Data.Binary.Get as G
 import Control.Monad.Trans.Class (lift)
-import qualified Data.Conduit.Network as CN
 import Interpreters.Action
 
 
@@ -30,7 +28,9 @@ data Exec = LastPiece
 
 chunkSize = 16384 -- TODO what id last piece is smaler than chunk
 
-sendHandshake :: Monad m => B.ByteString -> Sink BC.ByteString m () -> m ()
+sendHandshake :: Monad m => B.ByteString
+              -> Sink BC.ByteString m ()
+              -> m ()
 sendHandshake infoHash peerSink =
    yield handshake $$ peerSink
    where
@@ -41,23 +41,20 @@ recHandshake ::
    Monad m
    => Sink BC.ByteString m (TP.Perhaps (BC.ByteString, H.Handshake))
 recHandshake =
-   await >>= maybe (return $ Left "No handshake")
-                   (return . convertHandshake)
+   fmap (maybe (Left "No handshake") convertHandshake) await
    where
       convertHandshake = H.convertParsedOutput . H.decodeHandshake
 
 
 decodeMessage :: G.Decoder M.Message
               -> Conduit B.ByteString Action M.Message
-decodeMessage dec = do
-
+decodeMessage dec =
     case dec of
-        (G.Fail _ _ _) -> do
+        G.Fail {} -> do
             lift $ logF "ERROR: DECODING FAILURE"
             lift $ throwF TP.PacketParseException
 
         G.Partial fun -> do
-
             mx <- await
             case mx of
                 Nothing -> lift $ throwF TP.NetworkException
@@ -66,12 +63,11 @@ decodeMessage dec = do
         (G.Done lo _ x) -> do
             yield x
             leftover lo
-            (decodeMessage M.getMessage)
+            decodeMessage M.getMessage
 
 
-recMessage ::
-   P.Peer
-   -> Conduit M.Message Action (String, BC.ByteString)
+recMessage :: P.Peer
+           -> Conduit M.Message Action (String, BC.ByteString)
 recMessage peer = do
   message <- await
 
@@ -87,13 +83,13 @@ recMessage peer = do
             let pList = P.bsToPieceLs b
                 newPeer = peer {P.pieces = pList}
             lift $ logF "BF"
-            lift $ sendInterestedF
+            lift sendInterestedF
 
             recMessage newPeer
 
 
        Just (M.Have b) -> do
-            let p = (P.fromBsToInt b)
+            let p = P.fromBsToInt b
                 pList = p : P.pieces peer
                 newPeer = peer {P.pieces = pList}
 
@@ -111,7 +107,7 @@ recMessage peer = do
                       return ()
 
                  Just next -> do
-                      lift $ logF ("Req "++(show next))
+                      lift $ logF ("Req " ++ show next)
                       -- TODO check if its last
                       lift $ sendRequestF (next, 0, chunkSize)
                       lift $ setStatusF next TP.InProgress
@@ -121,8 +117,8 @@ recMessage peer = do
 
 
        Just (M.Piece p@(idx, offset, chunkBuffer)) -> do
-            sizeInfo <- lift $ getSizeInfoF
-            let newBuffer = (P.buffer peer) `BC.append` chunkBuffer
+            sizeInfo <- lift getSizeInfoF
+            let newBuffer = P.buffer peer `BC.append` chunkBuffer
                 newPeer = peer {P.buffer = newBuffer}
                 size = getSize idx sizeInfo
 
@@ -133,14 +129,21 @@ recMessage peer = do
                  LastPiece -> do
                     --        lift $ setStatusF idx TP.Done
                             yield (show idx, newBuffer)
-                            lift $ logF ("GOT LAST Piece " ++ (show idx) ++" "++ (show offset))
+                            lift $ logF ("GOT LAST Piece "
+                                        ++ show idx
+                                        ++ " "
+                                        ++ show offset)
                             return ()
 
                  Continue -> recMessage newPeer
                  YieldAndContinue -> do   -- Piece Done
                             lift $ setStatusF idx TP.Done
                             yield (show idx, newBuffer)
-                            lift $ logF ("GOT Piece " ++ (show idx) ++" "++ (show offset))
+                            lift $ logF ("GOT Piece "
+                                        ++ show idx
+                                        ++ " "
+                                        ++ show offset)
+
                             let clearPeer = newPeer {P.buffer = BC.empty}
                             recMessage clearPeer
 
@@ -153,7 +156,7 @@ recMessage peer = do
             recMessage peer
 
        Just y -> do
-            lift $ logF ("This message should not arrive while downloading " ++ (show y))
+            lift $ logF ("This message should not arrive while downloading " ++ show y)
             lift $ throwF TP.MsgNotSupportedException
 
 
@@ -164,7 +167,7 @@ handlePiecie ::
    -> P.Peer
    -> Action Exec
 handlePiecie sizeInfo (idx, offset) pieceSize peer
-  | (offset < sizeLeft) = do
+  | offset < sizeLeft = do
 
        let newOffset = offset + chunkSize
            reqSize = min sizeLeft chunkSize
@@ -178,11 +181,12 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
  | otherwise = do
       let pieces = P.pieces peer
           newBuffer = P.buffer peer
-          hshEq = ((Seq.index (P.pieceHashes peer) idx) == P.hashFor newBuffer)
+          hshEq = Seq.index (P.pieceHashes peer) idx == P.hashFor newBuffer
 
-
-
-      logF $ "HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
+      logF $ "HashEQ "
+             ++ show hshEq
+             ++ " "
+             ++ show (BC.length newBuffer)
       setStatusF idx TP.Done
 
 
@@ -194,7 +198,7 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
                  return LastPiece
 
             Just next -> do
-                 logF ("Next " ++ (show next))
+                 logF ("Next " ++ show next)
 
                  sendRequestF (next, 0 , reqSize next sizeInfo)
                  setStatusF next TP.InProgress
@@ -203,7 +207,7 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
 
       where
          reqSize next sizeInfo
-            | (last (P.pieces peer) == next) =
+            | last (P.pieces peer) == next =
                  min (TP.lastPieceSize sizeInfo) chunkSize
 
             | otherwise =
@@ -214,7 +218,7 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
 
 
 getSize next sizeInfo
-   | (next == (TP.numberOfPieces sizeInfo) - 1) = TP.lastPieceSize sizeInfo
+   | next == (TP.numberOfPieces sizeInfo) - 1 = TP.lastPieceSize sizeInfo
    | otherwise               = TP.normalPieceSize sizeInfo
 
 

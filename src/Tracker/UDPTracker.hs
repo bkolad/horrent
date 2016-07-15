@@ -118,12 +118,12 @@ instance Binary ConnectMsg where
 
 
 getSocket :: N.HostName -> String -> IO N.Socket
-getSocket hostName port =
-    do addrinfos <- N.getAddrInfo Nothing (Just hostName) (Just port)
-       let serveraddr = head addrinfos
-       sock <- N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol
-       N.connect sock (N.addrAddress serveraddr)
-       return sock
+getSocket hostName port = do 
+    addrinfos <- N.getAddrInfo Nothing (Just hostName) (Just port)
+    let serveraddr = head addrinfos
+    sock <- N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol
+    N.connect sock (N.addrAddress serveraddr)
+    return sock
 
 
 -- =====

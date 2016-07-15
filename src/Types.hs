@@ -71,7 +71,7 @@ type Perhaps a = Either String a
 data PiceInfo = Done
               | InProgress
               | NotHave
-        
+
   deriving (Show, Eq)
 
 type GlobalPiceInfo = TA.TArray Int PiceInfo

@@ -4,24 +4,19 @@ module Interpreters.IO ( InterpreterEnv (..)
                    ) where
 
 import Data.Conduit
-import qualified Data.Conduit.List as CL
+--import qualified Data.Conduit.List as CL
 import qualified Peers.Message as M
 import qualified Data.ByteString.Char8 as BC
 import qualified Types as TP
 import qualified Data.Array.MArray as MA
 import qualified Control.Concurrent.STM as STM
 import qualified Control.Concurrent as CC
-import Control.Monad.Trans.Class (lift)
---import Control.Monad.IO.Class
 import qualified System.Timeout as TOUT
 import qualified Data.Streaming.Network as SN
 import qualified Data.Conduit.Binary as CB
 import qualified Control.Monad.Trans.Resource as R
-import Control.Exception
-
-
-import Control.Monad.IO.Class
-import Control.Monad.Reader
+import Control.Exception (SomeException, throw, catch)
+import Control.Monad.Reader (ReaderT, ask, local)
 
 
 import Interpreters.Action
@@ -39,88 +34,86 @@ interpret :: Action a
           -> ReaderT InterpreterEnv IO a
 interpret program =
     case program of
-        Free (SendInterested c) ->
-            do pSink <- peerSink <$> ask
-               liftIO $ sendInterested pSink
-               interpret c
+        Free (SendInterested c) -> do
+            pSink <- peerSink <$> ask
+            TP.liftIO $ sendInterested pSink
+            interpret c
 
-        Free (Log str c) ->
-            do tID <- liftIO CC.myThreadId
-               liftIO $ print ("LOG:: " ++ str ++" "++ (show tID) )
-               interpret c
+        Free (Log str c) -> do
+            tID <- TP.liftIO CC.myThreadId
+            TP.liftIO $ print ("LOG:: " ++ str ++" "++ show tID)
+            interpret c
 
-        Free (ReqNextAndUpdate pieces fun) ->
-            do gl <- global <$> ask
-               next <- liftIO $ requestNextAndUpdateGlobal pieces gl
-               interpret $ fun next
+        Free (ReqNextAndUpdate pieces fun) -> do
+            gl   <- global <$> ask
+            next <- TP.liftIO $ requestNextAndUpdateGlobal pieces gl
+            interpret $ fun next
 
-        Free (SendRequest req c) ->
-            do pSink <- peerSink <$> ask
-               hostName <- host <$> ask
-               let (pend, _, _) = req
-                   exception =
-                        makeException TP.NetworkException hostName (Just pend)
+        Free (SendRequest req c) -> do
+            pSink    <- peerSink <$> ask
+            hostName <- host <$> ask
+            let (pend, _, _) = req
+                exception =
+                     makeException TP.NetworkException hostName (Just pend)
 
-               liftIO $ catch (sendRequest pSink req)
-                              (\(e :: SomeException) -> throw exception)
+            TP.liftIO $ catch (sendRequest pSink req)
+                           (\(e :: SomeException) -> throw exception)
 
-               local ( \ env -> env {pending = (Just pend)}) (interpret c)
-
-
-        Free (SetStatus x status c) ->
-            do gl <- global <$> ask
-               liftIO $ (setStatus x gl status)
-               interpret c
-
-        Free (ReqSizeInfo fun) ->
-            do sInfo <- sizeInfo <$> ask
-               interpret $ fun sInfo
+            local ( \ env -> env {pending = Just pend}) (interpret c)
 
 
-        Free (ReadData t fun) ->
-            do
-               mPending <- pending <$> ask
-               aData <- appData <$> ask
-               hostName <- host <$> ask
+        Free (SetStatus x status c) -> do
+            gl <- global <$> ask
+            TP.liftIO $ setStatus x gl status
+            interpret c
 
-               let networkExcpetion =
-                       makeException TP.NetworkException hostName mPending
-
-               mTOut <- liftIO $ catch
-                            (TOUT.timeout t (SN.appRead aData))
-                            (\(e :: SomeException) -> throw networkExcpetion)
-
-               let timeOutException =
-                       makeException TP.TimeOutException hostName mPending
-
-               maybe (throw timeOutException)
-                     (\d -> interpret (fun d))
-                     mTOut
+        Free (ReqSizeInfo fun) -> do
+            sInfo <- sizeInfo <$> ask
+            interpret $ fun sInfo
 
 
-        Free (SaveToFile fN content c) ->
-           do liftIO $ R.runResourceT $ (yield content)
-                                      $$ (CB.sinkFile fN)
-              interpret c
+        Free (ReadData t fun) -> do
+            mPending <- pending <$> ask
+            aData    <- appData <$> ask
+            hostName <- host <$> ask
 
-        Free (GetPendingPiece fun) ->
-            do mPending <- pending <$> ask
-               interpret (fun mPending)
+            let networkExcpetion =
+                    makeException TP.NetworkException hostName mPending
 
-        Free (Throw ex c) ->
-            do mPending <- pending <$> ask
-               hostName <- host <$> ask
-               let exception =
-                      makeException ex hostName mPending
+            mTOut <- TP.liftIO $ catch
+                         (TOUT.timeout t (SN.appRead aData))
+                         (\(e :: SomeException) -> throw networkExcpetion)
 
-               liftIO $ throw exception
+            let timeOutException =
+                    makeException TP.TimeOutException hostName mPending
+
+            maybe (throw timeOutException)
+                  (interpret . fun)
+                  mTOut
+
+
+        Free (SaveToFile fN content c) -> do
+            TP.liftIO $ R.runResourceT $ yield content
+                                      $$ CB.sinkFile fN
+            interpret c
+
+        Free (GetPendingPiece fun) -> do
+            mPending <- pending <$> ask
+            interpret (fun mPending)
+
+        Free (Throw ex c) -> do
+            mPending <- pending <$> ask
+            hostName <- host <$> ask
+            let exception =
+                   makeException ex hostName mPending
+
+            TP.liftIO $ throw exception
 
 
         Pure x -> return x
 
 
-makeException reason hName pending =
-    TP.PeerException reason hName pending
+makeException = TP.PeerException
 
 
 requestNextAndUpdateGlobal :: [Int] -> TP.GlobalPiceInfo -> IO (Maybe Int)

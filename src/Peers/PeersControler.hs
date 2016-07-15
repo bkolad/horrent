@@ -22,30 +22,30 @@ import qualified Control.Concurrent.STM as STM
 import  Control.Monad.Reader (runReaderT, lift, unless)
 
 
-start tracker =
-     do (peers, sizeInfo, fN)  <-  CN.makePeers tracker
-        liftIO $ print $ length peers
-        liftIO $ print sizeInfo
+start tracker = do
+    (peers, sizeInfo, fN)  <-  CN.makePeers tracker
+    liftIO $ print $ length peers
+    liftIO $ print sizeInfo
 
-        globalStatus       <- liftIO $ makeGlobal sizeInfo
-        qu                 <- liftIO $ SQ.makeQueueFromList peers
-        liftIO $ print "START"
-        lStat              <- liftIO $ download 100 qu globalStatus sizeInfo
-        let problems = filter (OK /=) $ join lStat
-        missing <- liftIO $ missingPieces globalStatus
-        return (problems, missing, show fN)
+    globalStatus       <- liftIO $ makeGlobal sizeInfo
+    qu                 <- liftIO $ SQ.makeQueueFromList peers
+    liftIO $ print "START"
+    lStat              <- liftIO $ download 100 qu globalStatus sizeInfo
+    let problems = filter (OK /=) $ join lStat
+    missing <- liftIO $ missingPieces globalStatus
+    return (problems, missing, show fN)
 
-        where
-            makeGlobal sizeInfo =
-                TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
+    where
+        makeGlobal sizeInfo =
+            TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
 
-            download pN qu globalStatus sizeInfo = do
-                let run = SQ.loop qu (runClientSafe globalStatus sizeInfo) []
-                SQ.spawnNThreadsAndWait pN run
+        download pN qu globalStatus sizeInfo = do
+            let run = SQ.loop qu (runClientSafe globalStatus sizeInfo) []
+            SQ.spawnNThreadsAndWait pN run
 
-            missingPieces globalStatus = do
-                es <- TP.showGlobal globalStatus
-                return $ filter (\(_, s) -> s /= TP.Done) es
+        missingPieces globalStatus = do
+            es <- TP.showGlobal globalStatus
+            return $ filter (\(_, s) -> s /= TP.Done) es
 
 
 
