@@ -4,7 +4,7 @@ import Types
 import System.Directory
 import Data.List.Ordered
 import qualified Data.List as L
-import qualified Peers.PeersControlerN as PC
+import qualified Peers.PeersControler as PC
 import qualified Control.Monad as M
 import qualified Data.ByteString as B
 
@@ -13,7 +13,7 @@ ubuntu = "/Users/blaze/Projects/Haskell/horrent/app/ub222.torrent"
 
 
 main::IO()
-main = do result <- runExceptT $ PC.startM ubuntu
+main = do result <- runExceptT $ PC.start ubuntu
           case  result of
               Left str -> print str
               Right x -> process x
