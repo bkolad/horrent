@@ -1,5 +1,3 @@
--- https://hackage.haskell.org/package/conduit-merge
--- https://gist.github.com/NicolasT/5436303#file-merge-hs
 
 {-# LANGUAGE RankNTypes #-}
 
@@ -57,16 +55,6 @@ sinkToFile :: MonadResource m => String -> Sink B.ByteString m ()
 sinkToFile title = CB.sinkFile (dir ++ title)
 
 
-sinkPrint :: MonadResource m => Int -> Sink (B.ByteString, Int) m ()
-sinkPrint acc = do
-    mx <- await
-    case mx of
-        Nothing -> TP.liftIO $ print $ "boo " ++ (show acc)
-        Just (x, i) -> do
-            let a = (B.length x)
-            TP.liftIO $ print $ (show acc) ++ "   "++(show i)
-            sinkPrint (a + acc)
-
 main = do
     mvs <- TP.runExceptT sizeInfo
     case mvs of
@@ -77,23 +65,12 @@ main = do
             print fNames
             let sc = source fNames
             print sz
-            runResourceT $ sc $$ (CB.isolate sz) =$= (sinkToFile (C8.unpack title))
-
+            runResourceT $ sc $$ CB.isolate sz
+                              =$= sinkToFile (C8.unpack title)
 
 
 mergeSources :: (Foldable f, Monad m) => f (Source m a) -> Source m a
 mergeSources = mergeR . fmap newResumableSource . toList
-
-
-mergeResumable :: Monad m => Int ->  [ResumableSource m o] -> Source m (o, Int)
-mergeResumable i [] = pure ()
-mergeResumable i (s : sources) = do
-    a <- lift $ s $$+- await
-    case a of
-        Nothing -> mergeResumable (i + 1) sources
-        Just x -> do
-            yield (x, i)
-            mergeResumable i (s : sources)
 
 
 mergeR :: Monad m => [ResumableSource m o] -> Source m o

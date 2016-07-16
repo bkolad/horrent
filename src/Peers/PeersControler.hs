@@ -1,10 +1,9 @@
 
 module Peers.PeersControler (start) where
 
-import qualified Tracker.Connector as CN (makePeers)
 import qualified Peers.Peer as P
 import qualified StaticQ as SQ
-import qualified Data.Conduit.Network as CN
+import qualified Data.Conduit.Network as C
 import Data.Conduit
 import qualified Data.ByteString.Char8 as BC
 import qualified Types as TP
@@ -21,26 +20,27 @@ import qualified Control.Concurrent.STM as STM
 
 import  Control.Monad.Reader (runReaderT, lift, unless)
 
+start :: [P.Peer]
+      -> TP.SizeInfo
+      -> String
+      -> IO ([PeerStatus], [(Int, TP.PiceInfo)])
+start peers sizeInfo downloadsDir = do
+--    liftIO $ print $ length peers
+--    liftIO $ print sizeInfo
 
-start tracker = do
-    (peers, sizeInfo, fN)  <-  CN.makePeers tracker
-    liftIO $ print $ length peers
-    liftIO $ print sizeInfo
-
-    globalStatus       <- liftIO $ makeGlobal sizeInfo
-    qu                 <- liftIO $ SQ.makeQueueFromList peers
-    liftIO $ print "START"
-    lStat              <- liftIO $ download 100 qu globalStatus sizeInfo
+    globalStatus <- makeGlobal sizeInfo
+    qu           <- SQ.makeQueueFromList peers
+    lStat        <- download downloadsDir 100 qu globalStatus sizeInfo
     let problems = filter (OK /=) $ join lStat
-    missing <- liftIO $ missingPieces globalStatus
-    return (problems, missing, show fN)
+    missing <-missingPieces globalStatus
+    return (problems, missing)
 
     where
         makeGlobal sizeInfo =
             TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
 
-        download pN qu globalStatus sizeInfo = do
-            let run = SQ.loop qu (runClientSafe globalStatus sizeInfo) []
+        download dir pN qu globalStatus sizeInfo = do
+            let run = SQ.loop qu (runClientSafe dir globalStatus sizeInfo) []
             SQ.spawnNThreadsAndWait pN run
 
         missingPieces globalStatus = do
@@ -55,9 +55,13 @@ data PeerStatus = OK
     deriving (Show, Eq)
 
 
-runClientSafe ::  TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO PeerStatus
-runClientSafe globalStatus sizeInfo peer =
-    catches (runClient globalStatus sizeInfo peer)
+runClientSafe :: String
+              -> TP.GlobalPiceInfo
+              -> TP.SizeInfo
+              -> P.Peer
+              -> IO PeerStatus
+runClientSafe dir globalStatus sizeInfo peer =
+    catches (runClient dir globalStatus sizeInfo peer)
           [ tubeExceptionHandler globalStatus
           , ioExceptionHandler peer ]
 
@@ -79,23 +83,29 @@ ioExceptionHandler peer =
         return $ HandShakeError (P.hostName peer++" "++show ex))
 
 
-setStatusNotHave :: Int -> TP.GlobalPiceInfo -> IO()
+setStatusNotHave :: Int
+                 -> TP.GlobalPiceInfo
+                 -> IO()
 setStatusNotHave x global =
     STM.atomically $ MA.writeArray global x TP.NotHave
 
 
-runClient :: TP.GlobalPiceInfo -> TP.SizeInfo -> P.Peer -> IO PeerStatus
-runClient globalStatus sizeInfo peer = CN.runTCPClient
-    (CN.clientSettings (P.port peer) (BC.pack $ P.hostName peer))
+runClient :: String
+          -> TP.GlobalPiceInfo
+          -> TP.SizeInfo
+          -> P.Peer
+          -> IO PeerStatus
+runClient dir globalStatus sizeInfo peer = C.runTCPClient
+    (C.clientSettings (P.port peer) (BC.pack $ P.hostName peer))
         $ \appData -> do
 
             let source =  appSource
-                peerSink   = CN.appSink appData
+                peerSink   = C.appSink appData
 
             let infoHash = P.infoHash peer
             T.sendHandshake infoHash peerSink
 
-            let action = tube peer source
+            let action = tube dir peer source
                 env = IPIO.InterpreterEnv { IPIO.appData  = appData
                                           , IPIO.global   = globalStatus
                                           , IPIO.sizeInfo = sizeInfo
@@ -107,13 +117,18 @@ runClient globalStatus sizeInfo peer = CN.runTCPClient
             runReaderT (IPIO.interpret action) env
 
 
-setStatusTimetOut :: Int -> TP.GlobalPiceInfo -> IO()
+setStatusTimetOut :: Int
+                  -> TP.GlobalPiceInfo
+                  -> IO()
 setStatusTimetOut x global =
     STM.atomically $ MA.writeArray global x TP.NotHave
 
 
-tube :: P.Peer -> Source Action B.ByteString -> Action PeerStatus
-tube peer getFrom  = do
+tube :: String
+      -> P.Peer
+      -> Source Action B.ByteString
+      -> Action PeerStatus
+tube dir peer getFrom  = do
 
    (nextSource, handshake) <- getFrom $$+ T.recHandshake
 
@@ -128,7 +143,7 @@ tube peer getFrom  = do
                 =$=  T.decodeMessage M.getMessage
                 =$=  T.recMessage peer
 
-          nextSource $=+ gg $$+- saveToFile
+          nextSource $=+ gg $$+- saveToFile dir
 
 
 
@@ -146,12 +161,13 @@ appSource =
             loop
 
 
-saveToFile :: Sink (String, BC.ByteString) Action PeerStatus
-saveToFile = do
+saveToFile :: String
+           -> Sink (String, BC.ByteString) Action PeerStatus
+saveToFile dir = do
     mX <- await
     case mX of
         Nothing ->
             return OK
         Just (fN, c) -> do
-            lift $ saveToFileF ("downloads/" ++fN) c
-            saveToFile
+            lift $ saveToFileF (dir ++ "/" ++ fN ++ ".part") c
+            saveToFile dir

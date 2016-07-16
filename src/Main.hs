@@ -1,24 +1,53 @@
 module Main where
 
 import Types
-import System.Directory
-import Data.List.Ordered
+import qualified System.Directory as Dir
 import qualified Data.List as L
 import qualified Peers.PeersControler as PC
+import qualified Tracker.Connector as CN (makePeers)
 import qualified Control.Monad as M
 import qualified Data.ByteString as B
-
-torrent = "/Users/blaze/Projects/Haskell/horrent/app/MOS2.torrent"
-ubuntu = "/Users/blaze/Projects/Haskell/horrent/app/ub222.torrent"
+import qualified Data.ByteString.Char8 as BC
 
 
-main::IO()
-main = do result <- runExceptT $ PC.start ubuntu
-          case  result of
-              Left str -> print str
-              Right x -> process x
+
+torrentDir = "/Users/blaze/Torrent/Downloads/"
+
+torrent = "/Users/blaze/Torrent/TorrentFiles/MOS2.torrent"
+ubuntu = "/Users/blaze/Torrent/TorrentFiles/ub222.torrent"
 
 
+main :: IO()
+main = do
+    result <- runExceptT (CN.makePeers ubuntu)
+    case result of
+        Left str -> print str
+        Right (peers, sizeInfo, torrentName, fInfos) -> do
+            let parentDir = torrentDir ++ BC.unpack torrentName
+                downloadsDir = parentDir ++ "/Parts"
+                filesDir = parentDir ++ "/Files"
+
+            Dir.createDirectoryIfMissing True downloadsDir
+            Dir.createDirectoryIfMissing True filesDir
+
+            (problems, missing) <- PC.start peers sizeInfo downloadsDir
+
+            case missing of
+                [] ->
+                    concatFiles fInfos downloadsDir filesDir
+                ms -> do
+                    print problems
+                    print ms
+
+
+concatFiles :: [FileInfo] -> String -> String -> IO ()
+concatFiles fInfos downloadsDir filesDir = undefined
+
+
+
+    --    Right x -> process x
+
+{--
 process (problems, missing, torrentName) =
     if (null missing)
         then
@@ -46,4 +75,4 @@ isInteger s = case reads s :: [(Integer, String)] of
 app torrentName fN =
     do print fN
        cont <- B.readFile ("downloads/"++fN)
-       B.appendFile torrentName cont
+       B.appendFile torrentName cont --}

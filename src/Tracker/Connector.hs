@@ -14,12 +14,12 @@ import qualified Tracker.HTTPTracker as HTTP_T
 
 
 makePeers :: String
-          -> TP.ExceptT String IO ([P.Peer], TP.SizeInfo, B.ByteString)
+          -> TP.ExceptT String IO ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])
 makePeers tracker = do
     torrentContent <- BI.parseFromFile tracker
     pSize          <- TP.liftEither $ BI.piceSize torrentContent
-    pNLls          <- TP.liftEither $ BI.parsePathAndLenLs torrentContent
-    let sizeInfo = BI.makeSizeInfo pNLls pSize
+    fInfos         <- TP.liftEither $ BI.parsePathAndLenLs torrentContent
+    let sizeInfo = BI.makeSizeInfo fInfos pSize
     ipsAndPorts    <- getPeers torrentContent
 
     infoHash       <- TP.liftEither $ BC.pack <$> BI.infoHash torrentContent
@@ -37,7 +37,7 @@ makePeers tracker = do
 
     let peers = map makePeer ipsAndPorts
     name <- TP.liftEither $ BI.torrentName torrentContent
-    return (peers, sizeInfo, name)
+    return (peers, sizeInfo, name, fInfos)
 
 
 getSizeInfo :: BI.BEncode

@@ -27,7 +27,7 @@ import qualified Data.Map as Map
 import Data.Maybe (isJust)
 import Control.Monad (join)
 
-import Types
+import Types as TP
 import Control.Lens
 
 
@@ -156,10 +156,10 @@ getAnnounce st
         Left "Announce type not recognized"
 
 
-makeSizeInfo :: [(BC.ByteString, Int)]
+makeSizeInfo :: [FileInfo]
              -> Int -> SizeInfo
-makeSizeInfo pNLls pSize =
-       let torrentSize = foldl (\acc (_, x) -> x + acc ) 0 pNLls
+makeSizeInfo fInfo pSize =
+       let torrentSize = foldl (\acc fi -> (fSize fi) + acc ) 0 fInfo
            numberOfPieces =
                ceiling $ (fromIntegral torrentSize) / (fromIntegral pSize)
            lps = torrentSize `mod` pSize
@@ -169,15 +169,17 @@ makeSizeInfo pNLls pSize =
 
 
 parsePathAndLenLs :: BP.BEncode
-                  -> Either String [(B.ByteString, Int)]
+                  -> Either String [TP.FileInfo]
 parsePathAndLenLs content =
         if isSingleFile content
             then
                 do tName <- torrentName content
                    tSize <- torrentSize content
-                   return [(tName, tSize)]
+                   return [FileInfo tName tSize]
             else
-                multiFiles content
+                fmap (fmap app) (multiFiles content)
+                where
+                    app = uncurry FileInfo 
 
 
 lsWordToPath ::  [Maybe ([BC.ByteString], Int)]
