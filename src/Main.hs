@@ -8,6 +8,8 @@ import qualified Tracker.Connector as CN (makePeers)
 import qualified Control.Monad as M
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
+import qualified FileManager.FileSplitter as FS
+
 
 
 
@@ -23,18 +25,23 @@ main = do
     case result of
         Left str -> print str
         Right (peers, sizeInfo, torrentName, fInfos) -> do
-            let parentDir = torrentDir ++ BC.unpack torrentName
-                downloadsDir = parentDir ++ "/Parts"
-                filesDir = parentDir ++ "/Files"
+            let parentDir    = torrentDir ++ BC.unpack torrentName
+                downloadsDir = parentDir ++ "/Parts/"
+                filesDir     = parentDir ++ "/Files/"
 
             Dir.createDirectoryIfMissing True downloadsDir
             Dir.createDirectoryIfMissing True filesDir
+            FS.concatFiles fInfos downloadsDir filesDir
+    --        (problems, missing) <- PC.start peers sizeInfo downloadsDir
 
+            return ()
+        --    FS.concatFiles fInfos downloadsDir filesDir
+{--
             (problems, missing) <- PC.start peers sizeInfo downloadsDir
 
             case missing of
                 [] ->
-                    concatFiles fInfos downloadsDir filesDir
+                    FS.concatFiles fInfos downloadsDir filesDir
                 ms -> do
                     print problems
                     print ms
@@ -44,7 +51,7 @@ concatFiles :: [FileInfo] -> String -> String -> IO ()
 concatFiles fInfos downloadsDir filesDir = undefined
 
 
-
+--}
     --    Right x -> process x
 
 {--

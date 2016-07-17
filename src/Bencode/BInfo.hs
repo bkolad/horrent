@@ -136,15 +136,6 @@ parseFromFile path = do content <- liftIO $ B.readFile path
 
 data AnnounceType = HTTP  BC.ByteString | UDP  BC.ByteString
 
-{--
-getAnnounce :: BC.ByteString -> Either String AnnounceType
-getAnnounce st =
-    if (BC.isPrefixOf (BC.pack("http")) st)
-        then return $ HTTP st
-        else if (BC.isPrefixOf (BC.pack "udp") st)
-            then return $ UDP st
-            else Left "Announce type not recognized"
---}
 
 getAnnounce :: BC.ByteString -> Either String AnnounceType
 getAnnounce st
@@ -179,7 +170,7 @@ parsePathAndLenLs content =
             else
                 fmap (fmap app) (multiFiles content)
                 where
-                    app = uncurry FileInfo 
+                    app = uncurry FileInfo
 
 
 lsWordToPath ::  [Maybe ([BC.ByteString], Int)]
