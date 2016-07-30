@@ -20,11 +20,15 @@ getHostsAndIps :: BC.ByteString
                ->  BI.BEncode
                -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
 getHostsAndIps tracker infoH torrentContent = do
-    url        <- TP.liftEither $ trackerUrl tracker infoH torrentContent
-    rsp        <- TP.liftIO $ getResponseFromTracker url
-    parsedResp <- TP.liftEither $ BI.parse2BEncode . BC.pack $ rsp
-    peersBS    <- TP.liftEither $ BI.peers parsedResp
-    return $ getIPandPort peersBS
+    url         <- TP.liftEither $ trackerUrl tracker infoH torrentContent
+    rsp         <- TP.liftIO $ getResponseFromTracker url
+    parsedResp  <- TP.liftEither $ BI.parse2BEncode . BC.pack $ rsp
+    let peersBS = BI.peers parsedResp
+    case peersBS of
+        Right x ->
+            return $ getIPandPort x
+        Left msg ->
+            TP.throwError (msg ++ " URL: " ++ url ++ " RSP: " ++rsp)
 
 
 

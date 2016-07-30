@@ -3,7 +3,8 @@
 module Bencode.BInfo
     ( BP.BEncode
     , AnnounceType(..)
-    , annouce
+    , announceList
+    , announce
     , infoHash
     , parseFromFile
     , BP.parse2BEncode
@@ -66,7 +67,7 @@ filesLs = BP.keyL "info" . BP.keyL "files"
 
 genericGet dI lenS dic =
     let ret = dic ^? (mkLens dI) . lenS
-        msg = "Bencode parsing error: Missing " ++ show dI
+        msg = "Bencode parsing error: Missing " ++ show dI ++ " "++ (show dic)
     in maybe (Left msg) Right ret
 
 
@@ -75,12 +76,12 @@ isSingleFile dic =
     let ret = dic ^? (mkLens SingleFile) . BP.bIntL
     in isJust ret--maybe False (const True) ret
 
-annouce :: BP.BEncode -> Either String BC.ByteString--String
-annouce = genericGet Announce BP.bStrL
+announce :: BP.BEncode -> Either String BC.ByteString--String
+announce = genericGet Announce BP.bStrL
 
 
 --annouce :: BP.BEncode -> Either String BC.ByteString--String
-annouceLst = genericGet AnnounceLst BP.listL
+announceLst = genericGet AnnounceLst BP.listL
 
 
 peers :: BP.BEncode -> Either String BC.ByteString
@@ -193,7 +194,20 @@ toPathLen ls =
     in map (\dic -> sequence (dic ^.. path, dic ^? len)) ls
 
 
+announceList :: BP.BEncode -> Either String [BC.ByteString]
+announceList torrentContent = do
+    ls <- announceLst torrentContent
+    let toLs =  BP.listL . traverse . BP.bStrL
+    return $ map (\dic -> (dic ^. toLs)) ls
+
+
+
 torrent = "/Users/blaze/Torrent/TorrentFiles/MOS2.torrent"
+
+{--
 kk = do
     Right b <- (runExceptT $ parseFromFile torrent)
-    return $ annouceLst b
+--    let Right ls = announceLst b
+--        l = [BP.BList[BP.BStr $ BC.pack "KK", BP.BStr $ BC.pack "00"]]
+    return $ announceList ls
+--}

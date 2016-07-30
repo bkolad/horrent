@@ -10,7 +10,8 @@ module Types  ( GlobalPiceInfo
               , ExeptionType (..)
               , HashInfo
               , liftEither
-              , ExceptT
+              , ExceptT (..)
+              , throwError
               , liftIO
               , runExceptT
               , hashInfoFromList
@@ -29,7 +30,7 @@ import qualified Data.ByteString as B
 import qualified Data.Sequence as Seq
 import Control.Concurrent.STM
 import Data.Array.MArray
-import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
+import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import qualified Network as N
 import Control.Exception (Exception(..))

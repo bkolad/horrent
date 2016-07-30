@@ -11,6 +11,7 @@ import Tracker.TrackerUtils (getIPandPort)
 import qualified Types as TP
 import qualified Tracker.UDPTracker as UDP_T
 import qualified Tracker.HTTPTracker as HTTP_T
+import Control.Concurrent.Async (mapConcurrently)
 
 
 makePeers :: String
@@ -48,7 +49,6 @@ createPeer torrentContent ipsAndPorts = do
     return (peers, sizeInfo, name, fInfos)
 
 
-
 getSizeInfo :: BI.BEncode
             -> Either String TP.SizeInfo
 getSizeInfo torrentContent = do
@@ -60,12 +60,36 @@ getSizeInfo torrentContent = do
 getPeers :: BI.BEncode
          -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
 getPeers torrentContent = do
-    ann     <- TP.liftEither $ BI.annouce torrentContent
-    annType <- TP.liftEither $ BI.getAnnounce ann
-    infoH   <- TP.liftEither $ BI.infoHash torrentContent
-    case annType of
-        BI.HTTP tracker ->
+    infoH     <- TP.liftEither $ BI.infoHash torrentContent
+    announces <- TP.liftEither $ makeAnnounces torrentContent
+
+    ls <- TP.liftIO $ mapConcurrently (\x -> (run x) torrentContent) announces
+
+    fmap (concat) $ TP.liftEither $ sequence ls
+--    undefined
+
+makeAnnounces :: BI.BEncode -> Either String [BI.AnnounceType]
+makeAnnounces torrentContent = do
+    announce   <- BI.announce torrentContent
+    annouceLst <- BI.announceList torrentContent
+
+    traverse BI.getAnnounce ([annouceLst !! 1])
+
+
+run :: BI.AnnounceType
+    -> BI.BEncode
+    -> IO (Either String [(N.HostName, N.PortNumber)])
+run a b = TP.runExceptT $ callTracker a b
+
+callTracker :: BI.AnnounceType
+            -> BI.BEncode
+            -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
+callTracker aType torrentContent = do
+    infoH  <- TP.liftEither $ BI.infoHash torrentContent
+
+    case aType of
+        BI.HTTP tracker -> do
             HTTP_T.getHostsAndIps tracker infoH torrentContent
 
-        BI.UDP tracker ->
+        BI.UDP tracker -> do
             UDP_T.getHostsAndIps tracker infoH

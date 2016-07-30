@@ -27,6 +27,7 @@ main = do
                 downloadsDir = parentDir ++ "/Parts/"
                 filesDir     = parentDir ++ "/Files/"
 
+            print $ "Peers " ++ (show (length peers))
             Dir.createDirectoryIfMissing True downloadsDir
             Dir.createDirectoryIfMissing True filesDir
 

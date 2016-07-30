@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 
 module Bencode.BParser
-    ( BEncode
+    ( BEncode 
     , bStrL
     , bIntL
     , keyL
@@ -10,6 +10,7 @@ module Bencode.BParser
     , parse2BEncode
     , listL
     , parseUDPAnnounce
+    , listLAndJoin
     ) where
 
 
@@ -76,6 +77,14 @@ listL = prism BList f
     where
         f (BList ls) = Right ls
         f l = Left l
+
+
+listLAndJoin :: Prism BEncode BEncode BEncode [BEncode]
+listLAndJoin = prism BList f
+    where
+        f (BList ls) = Right (head ls)
+        f l = Left l
+
 
 
 num::Parser String
