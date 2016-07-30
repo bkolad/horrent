@@ -11,6 +11,8 @@ import Tracker.TrackerUtils (getIPandPort)
 import qualified Types as TP
 import qualified Tracker.UDPTracker as UDP_T
 import qualified Tracker.HTTPTracker as HTTP_T
+import Data.Either (partitionEithers)
+
 import Control.Concurrent.Async (mapConcurrently)
 
 
@@ -64,8 +66,12 @@ getPeers torrentContent = do
     announces <- TP.liftEither $ makeAnnounces torrentContent
 
     ls <- TP.liftIO $ mapConcurrently (\x -> (run x) torrentContent) announces
+    let (lefts, rights) = partitionEithers ls
 
-    fmap (concat) $ TP.liftEither $ sequence ls
+    TP.liftIO $ print ("Tracker Errors "++ (show $ length lefts))
+
+    return $ concat rights
+    --fmap (concat) $ TP.liftEither $ sequence ls
 --    undefined
 
 makeAnnounces :: BI.BEncode -> Either String [BI.AnnounceType]
@@ -73,7 +79,7 @@ makeAnnounces torrentContent = do
     announce   <- BI.announce torrentContent
     annouceLst <- BI.announceList torrentContent
 
-    traverse BI.getAnnounce ([annouceLst !! 1])
+    traverse BI.getAnnounce (take 3 annouceLst )
 
 
 run :: BI.AnnounceType
@@ -89,7 +95,9 @@ callTracker aType torrentContent = do
 
     case aType of
         BI.HTTP tracker -> do
+            TP.liftIO $ print tracker
             HTTP_T.getHostsAndIps tracker infoH torrentContent
 
         BI.UDP tracker -> do
+            TP.liftIO $ print tracker
             UDP_T.getHostsAndIps tracker infoH

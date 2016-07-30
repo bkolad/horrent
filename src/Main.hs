@@ -19,7 +19,7 @@ ubuntu = "/Users/blaze/Torrent/TorrentFiles/ub222.torrent"
 
 main :: IO()
 main = do
-    result <- runExceptT (CN.makePeers ubuntu)
+    result <- runExceptT (CN.makePeers torrent)
     case result of
         Left str -> print str
         Right (peers, sizeInfo, torrentName, fInfos) -> do

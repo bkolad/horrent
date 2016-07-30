@@ -172,7 +172,7 @@ handlePiecie sizeInfo (idx, offset) pieceSize peer
        let newOffset = offset + chunkSize
            reqSize = min sizeLeft chunkSize
        sendRequestF (idx, newOffset , reqSize)
-      -- logF $ show (idx, newOffset , reqSize) --"HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
+       logF $ show (idx, newOffset , reqSize) --"HashEQ "++ (show hshEq) ++ " "++ (show (BC.length newBuffer))
 
        return Continue
 
