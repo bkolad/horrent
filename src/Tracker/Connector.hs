@@ -17,13 +17,20 @@ makePeers :: String
           -> TP.ExceptT String IO ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])
 makePeers tracker = do
     torrentContent <- BI.parseFromFile tracker
-    pSize          <- TP.liftEither $ BI.piceSize torrentContent
-    fInfos         <- TP.liftEither $ BI.parsePathAndLenLs torrentContent
-    let sizeInfo = BI.makeSizeInfo fInfos pSize
     ipsAndPorts    <- getPeers torrentContent
+    TP.liftEither $ createPeer torrentContent ipsAndPorts
 
-    infoHash       <- TP.liftEither $ BC.pack <$> BI.infoHash torrentContent
-    pHashes        <- TP.liftEither $ BI.piecesHashSeq torrentContent
+
+createPeer :: BI.BEncode
+     -> [(N.HostName, N.PortNumber)]
+     -> Either String
+              ([P.Peer], TP.SizeInfo, BC.ByteString, [TP.FileInfo])
+createPeer torrentContent ipsAndPorts = do
+    pSize    <- BI.piceSize torrentContent
+    fInfos   <- BI.parsePathAndLenLs torrentContent
+    infoHash <- BC.pack <$> BI.infoHash torrentContent
+    pHashes  <- BI.piecesHashSeq torrentContent
+    name     <- BI.torrentName torrentContent
 
     let makePeer (host, p) =
           P.Peer { P.hostName     = host
@@ -35,9 +42,11 @@ makePeers tracker = do
                  , P.pieceHashes  = pHashes
                  }
 
+    let sizeInfo = BI.makeSizeInfo fInfos pSize
     let peers = map makePeer ipsAndPorts
-    name <- TP.liftEither $ BI.torrentName torrentContent
+
     return (peers, sizeInfo, name, fInfos)
+
 
 
 getSizeInfo :: BI.BEncode

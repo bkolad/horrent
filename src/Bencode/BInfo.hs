@@ -32,6 +32,7 @@ import Control.Lens
 
 
 data DicInfo = Announce
+             | AnnounceLst
              | PiecesHash
              | Peers
              | PieceSize
@@ -46,6 +47,7 @@ mkLens :: DicInfo -> Prism' BP.BEncode BP.BEncode
 mkLens di =
     case di of
         Announce    -> BP.keyL "announce"
+        AnnounceLst -> BP.keyL "announce-list"
         Peers       -> BP.keyL "peers"
         Info        -> infoLens
         PiecesHash  -> infoLens . BP.keyL "pieces"
@@ -77,6 +79,10 @@ annouce :: BP.BEncode -> Either String BC.ByteString--String
 annouce = genericGet Announce BP.bStrL
 
 
+--annouce :: BP.BEncode -> Either String BC.ByteString--String
+annouceLst = genericGet AnnounceLst BP.listL
+
+
 peers :: BP.BEncode -> Either String BC.ByteString
 peers = genericGet Peers BP.bStrL
 
@@ -85,7 +91,7 @@ piecesHash :: BP.BEncode -> Either String BC.ByteString
 piecesHash = genericGet PiecesHash BP.bStrL
 
 
-piceSize :: BP.BEncode -> Either String Int
+piceSize :: BP.BEncode -> Either String Int -- TODO type synnym
 piceSize = genericGet PieceSize BP.bIntL
 
 
@@ -185,3 +191,9 @@ toPathLen ls =
     let path = BP.keyL "path" . BP.listL . traverse . BP.bStrL
         len  = BP.keyL "length" . BP.bIntL
     in map (\dic -> sequence (dic ^.. path, dic ^? len)) ls
+
+
+torrent = "/Users/blaze/Torrent/TorrentFiles/MOS2.torrent"
+kk = do
+    Right b <- (runExceptT $ parseFromFile torrent)
+    return $ annouceLst b

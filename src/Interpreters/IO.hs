@@ -31,8 +31,8 @@ data InterpreterEnv =
                    }
 
 interpret :: Action a
-          -> ReaderT InterpreterEnv IO a
-interpret program =
+          -> ReaderT InterpreterEnv IO a -- ExceptT remembrt order of the monad stack
+interpret program =                     -- ExceoT ReaderT blbla -> newtype read about freer
     case program of
         Free (SendInterested c) -> do
             pSink <- peerSink <$> ask

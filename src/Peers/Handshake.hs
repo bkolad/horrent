@@ -23,7 +23,7 @@ instance Show Handshake where
 myId = "-TR2840-d0p22uiake0b"
 protocol = "BitTorrent protocol"
 
-instance Binary Handshake where
+instance Binary Handshake where   -- Tetsts
 
   put handshake = putWord8 (fromIntegral . length $ protocol)
                >> putByteString (BC.pack protocol)
