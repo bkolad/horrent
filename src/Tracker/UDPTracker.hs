@@ -17,6 +17,7 @@ import qualified Data.Binary.Get as Get--(Get, getInt64be, getInt32be, runGetOrF
 import qualified Data.Binary.Put as Put
 import Data.Int (Int32, Int64)
 import Control.Monad.Trans.Except
+import Control.Exception as E
 
 
 myId = BC.pack "-TR2840-d0p22uiake0b"
@@ -118,11 +119,13 @@ instance Binary ConnectMsg where
 
 
 getSocket :: N.HostName -> String -> IO N.Socket
-getSocket hostName port = do 
+getSocket hostName port = do
     addrinfos <- N.getAddrInfo Nothing (Just hostName) (Just port)
     let serveraddr = head addrinfos
     sock <- N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol
     N.connect sock (N.addrAddress serveraddr)
+
+    
     return sock
 
 
@@ -176,7 +179,9 @@ getHostsAndIps tracker infoHash = do
 
     aRsp <- ExceptT $ sourceSocket $$ sinkAnnResp
 
+    TP.liftIO $ N.sClose socket
     return $ aRhips aRsp
+
 --    return ()
     where
         sendConnect sinkSocket =
