@@ -79,7 +79,7 @@ makeAnnounces torrentContent = do
     announce   <- BI.announce torrentContent
     annouceLst <- BI.announceList torrentContent
 
-    traverse BI.getAnnounce (take 1 (announce : annouceLst) )
+    traverse BI.getAnnounce ((annouceLst) )
 
 
 run :: BI.AnnounceType

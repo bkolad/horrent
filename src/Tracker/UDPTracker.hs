@@ -18,6 +18,8 @@ import qualified Data.Binary.Put as Put
 import Data.Int (Int32, Int64)
 import Control.Monad.Trans.Except
 import Control.Exception as E
+import Utils (io2ExceptT)
+import Control.Monad (join)
 
 
 myId = BC.pack "-TR2840-d0p22uiake0b"
@@ -118,14 +120,14 @@ instance Binary ConnectMsg where
 
 
 
-getSocket :: N.HostName -> String -> IO N.Socket
+getSocket :: N.HostName -> String ->  IO N.Socket
 getSocket hostName port = do
     addrinfos <- N.getAddrInfo Nothing (Just hostName) (Just port)
     let serveraddr = head addrinfos
     sock <- N.socket (N.addrFamily serveraddr) N.Datagram N.defaultProtocol
     N.connect sock (N.addrAddress serveraddr)
 
-    
+
     return sock
 
 
@@ -164,31 +166,31 @@ getHostsAndIps :: B.ByteString
 getHostsAndIps tracker infoHash = do
     (hn, port) <-  TP.liftEither $ BI.parseUDPAnnounce tracker
 
-    socket <- TP.liftIO $ getSocket (BC.unpack hn) (BC.unpack port)
+    socket <- io2ExceptT $ getSocket (BC.unpack hn) (BC.unpack port)
 
     let sinkSocket   = UDPC.sinkSocket socket
         sourceSocket = UDPC.sourceSocket socket 10000
 
-    TP.liftIO $ sendConnect sinkSocket
+    io2ExceptT $ sendConnect sinkSocket
 
-    (ConnectMsg conn_id act trans_id) <- getRespFromTracker sourceSocket
+-- wow!!! wtf!
+    (ConnectMsg conn_id act trans_id) <- join $ io2ExceptT $ TP.liftEither <$> getRespFromTracker sourceSocket
 
     let announceMsg = mkAnnounce conn_id trans_id (BC.pack infoHash)
 
-    TP.liftIO $ sendAnnounceMsg announceMsg sinkSocket
+    io2ExceptT $ sendAnnounceMsg announceMsg sinkSocket
 
-    aRsp <- ExceptT $ sourceSocket $$ sinkAnnResp
+    aRsp <- io2ExceptT $ sourceSocket $$ sinkAnnResp
 
-    TP.liftIO $ N.sClose socket
-    return $ aRhips aRsp
+    io2ExceptT $ N.sClose socket
+    TP.liftEither $ fmap aRhips aRsp
 
---    return ()
     where
         sendConnect sinkSocket =
              yield (BL.toStrict connectMsg) $$ sinkSocket
 
         getRespFromTracker sourceSocket =
-             ExceptT $ sourceSocket $$ trackerResp
+               sourceSocket $$ trackerResp
 
         sendAnnounceMsg msg sinkSocket =
             let enc =  BL.toStrict $ Put.runPut $ announcePut msg

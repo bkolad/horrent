@@ -13,6 +13,8 @@ import Tracker.TrackerUtils (getIPandPort)
 import Network.HTTP.Base (urlEncodeVars)
 import Network.HTTP as HTTP
 import Data.Binary.Get
+import Utils (io2ExceptT)
+
 
 
 getHostsAndIps :: BC.ByteString
@@ -21,7 +23,7 @@ getHostsAndIps :: BC.ByteString
                -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
 getHostsAndIps tracker infoH torrentContent = do
     url         <- TP.liftEither $ trackerUrl tracker infoH torrentContent
-    rsp         <- TP.liftIO $ getResponseFromTracker url
+    rsp         <- io2ExceptT $ getResponseFromTracker url
     parsedResp  <- TP.liftEither $ BI.parse2BEncode . BC.pack $ rsp
     let peersBS = BI.peers parsedResp
     case peersBS of
