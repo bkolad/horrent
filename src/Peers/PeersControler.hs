@@ -17,22 +17,24 @@ import Control.Monad (join)
 import Control.Exception
 import qualified Data.Array.MArray as MA
 import qualified Control.Concurrent.STM as STM
+import Logger.BasicLogger (Logger)
+
 
 import  Control.Monad.Reader (runReaderT, lift, unless)
 
-start :: [P.Peer]
+start :: (MonadIO m)
+      => [P.Peer]
       -> TP.SizeInfo
       -> String
-      -> IO ([PeerStatus], [(Int, TP.PiceInfo)])
-start peers sizeInfo downloadsDir = do
---    liftIO $ print $ length peers
---    liftIO $ print sizeInfo
+      -> Logger String
+      -> m ([PeerStatus], [(Int, TP.PiceInfo)])
+start peers sizeInfo downloadsDir log = do
 
-    globalStatus <- makeGlobal sizeInfo
-    qu           <- SQ.makeQueueFromList peers
-    lStat        <- download downloadsDir 100 qu globalStatus sizeInfo
+    globalStatus <- liftIO $ makeGlobal sizeInfo
+    qu           <- liftIO $ SQ.makeQueueFromList peers
+    lStat        <- liftIO $ download downloadsDir 500 qu globalStatus sizeInfo
     let problems = filter (OK /=) $ join lStat
-    missing <-missingPieces globalStatus
+    missing      <- liftIO $ missingPieces globalStatus
     return (problems, missing)
 
     where

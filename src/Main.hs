@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Types
@@ -9,6 +10,10 @@ import qualified Control.Monad as M
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified FileManager.FileSplitter as FS
+import qualified Logger.BasicLogger as Logger
+import qualified Data.Text as T
+
+
 
 
 torrentDir = "/Users/blaze/Torrent/Downloads/"
@@ -19,24 +24,27 @@ ubuntu = "/Users/blaze/Torrent/TorrentFiles/ub222.torrent"
 
 main :: IO()
 main = do
-    result <- runExceptT (CN.makePeers torrent)
+    l <- Logger.start
+    let log = Logger.logString l
+    result <- runExceptT (CN.makePeers torrent log)
     case result of
-        Left str -> print str
+        Left str -> log str
         Right (peers, sizeInfo, torrentName, fInfos) -> do
-            let parentDir    = torrentDir ++ BC.unpack torrentName
+            let parentDir    = torrentDir ++  ubuntu
                 downloadsDir = parentDir ++ "/Parts/"
                 filesDir     = parentDir ++ "/Files/"
 
-            print $ "Peers " ++ (show (length peers))
+            log $ "Peers " ++  (show (length peers))
+
             Dir.createDirectoryIfMissing True downloadsDir
             Dir.createDirectoryIfMissing True filesDir
 
-            (problems, missing) <- PC.start peers sizeInfo downloadsDir
+            (problems, missing) <- PC.start peers sizeInfo downloadsDir log
 
-            print missing
+            log $  (show missing)
             case missing of
                 [] ->
                     FS.concatFiles fInfos downloadsDir filesDir
                 ms -> do
-                    print problems
-                    print ms
+                    log $ show problems
+                    log $ show ms

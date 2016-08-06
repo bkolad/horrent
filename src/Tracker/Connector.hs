@@ -14,21 +14,24 @@ import qualified Tracker.HTTPTracker as HTTP_T
 import Data.Either (partitionEithers)
 
 import Control.Concurrent.Async (mapConcurrently)
+import Logger.BasicLogger
 
 
 makePeers :: String
+          -> Logger String
           -> TP.ExceptT String IO ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])
-makePeers tracker = do
+makePeers tracker log = do
     torrentContent <- BI.parseFromFile tracker
-    ipsAndPorts    <- getPeers torrentContent
-    TP.liftEither $ createPeer torrentContent ipsAndPorts
+    ipsAndPorts    <- getPeers torrentContent log
+    TP.liftEither $ createPeer torrentContent ipsAndPorts log
 
 
 createPeer :: BI.BEncode
      -> [(N.HostName, N.PortNumber)]
+     -> Logger String
      -> Either String
               ([P.Peer], TP.SizeInfo, BC.ByteString, [TP.FileInfo])
-createPeer torrentContent ipsAndPorts = do
+createPeer torrentContent ipsAndPorts log = do
     pSize    <- BI.piceSize torrentContent
     fInfos   <- BI.parsePathAndLenLs torrentContent
     infoHash <- BC.pack <$> BI.infoHash torrentContent
@@ -51,30 +54,22 @@ createPeer torrentContent ipsAndPorts = do
     return (peers, sizeInfo, name, fInfos)
 
 
-getSizeInfo :: BI.BEncode
-            -> Either String TP.SizeInfo
-getSizeInfo torrentContent = do
-    pieceSize   <- BI.piceSize torrentContent
-    torrentSize <- BI.torrentSize torrentContent
-    return $ TP.getSizeData torrentSize pieceSize
-
-
 getPeers :: BI.BEncode
+         -> Logger String
          -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
-getPeers torrentContent = do
+getPeers torrentContent log = do
     infoH     <- TP.liftEither $ BI.infoHash torrentContent
     announces <- TP.liftEither $ makeAnnounces torrentContent
 
-    ls <- TP.liftIO $ mapConcurrently (\x -> (run x) torrentContent) announces
+    ls <- TP.liftIO $ mapConcurrently (\x -> run x torrentContent log) announces
     let (lefts, rights) = partitionEithers ls
 
-    TP.liftIO $ print ("Tracker Errors "++ (show $ length lefts))
+    TP.liftIO $ log ("Tracker Errors "++ (show $ length lefts))
 
     return $ concat rights
-    --fmap (concat) $ TP.liftEither $ sequence ls
---    undefined
 
-makeAnnounces :: BI.BEncode -> Either String [BI.AnnounceType]
+makeAnnounces :: BI.BEncode
+              -> Either String [BI.AnnounceType]
 makeAnnounces torrentContent = do
     announce   <- BI.announce torrentContent
     annouceLst <- BI.announceList torrentContent
@@ -84,20 +79,22 @@ makeAnnounces torrentContent = do
 
 run :: BI.AnnounceType
     -> BI.BEncode
+    -> Logger String
     -> IO (Either String [(N.HostName, N.PortNumber)])
-run a b = TP.runExceptT $ callTracker a b
+run a b log = TP.runExceptT $ callTracker a b log
 
 callTracker :: BI.AnnounceType
             -> BI.BEncode
+            -> Logger String
             -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
-callTracker aType torrentContent = do
+callTracker aType torrentContent log = do
     infoH  <- TP.liftEither $ BI.infoHash torrentContent
 
     case aType of
         BI.HTTP tracker -> do
-            TP.liftIO $ print tracker
+            TP.liftIO $ log (show tracker)
             HTTP_T.getHostsAndIps tracker infoH torrentContent
 
         BI.UDP tracker -> do
-            TP.liftIO $ print tracker
+            TP.liftIO $ log (show tracker)
             UDP_T.getHostsAndIps tracker infoH

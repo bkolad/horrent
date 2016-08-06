@@ -44,7 +44,7 @@ executable horrent-exec
                       , tasty-hunit
                       , tasty-quickcheck
                       , conduit-combinators
-                      , text
+                      , text >= 1.2.2.1
                       , lens
 
 
