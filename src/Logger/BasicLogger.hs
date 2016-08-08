@@ -4,7 +4,7 @@
            , FlexibleInstances
            , FlexibleContexts #-}
 
-module Logger.BasicLogger where
+module Logger.BasicLogger  where
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T (putStrLn)
@@ -15,9 +15,10 @@ import Control.Monad (forever)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Writer.Class
+import Control.Monad.Except
 
 data BasicLogger =
-    BasicLogger { unlogger :: TChan T.Text }
+    BasicLogger { runlogger :: TChan T.Text }
 
 type Logger a = (a -> IO())
 
@@ -37,7 +38,7 @@ logString l msg = logMsg l (T.pack msg)
 process :: TChan T.Text -> IO ()
 process chan = forever $ do
     l <- atomically $ readTChan chan
-    T.putStrLn "BL!!!!!!"
+--    T.putStrLn "BL!!!!!!"
     T.putStrLn l
 
 
@@ -76,6 +77,7 @@ class (Monad m) => MonadLogger m where
 instance (Logable l) => MonadTrans (LoggerT l) where
     lift m = L $ \h -> m
 
+lift2Logger h m = L $ \h -> m
 
 instance (Logable l, MonadIO m) => MonadIO (LoggerT l m) where
     liftIO = lift . liftIO
@@ -83,6 +85,7 @@ instance (Logable l, MonadIO m) => MonadIO (LoggerT l m) where
 
 instance (Logable l, MonadIO m) => MonadLogger (LoggerT l m) where
     logMessage x = L $ \h -> liftIO $ logM h x
+
 
 
 instance MonadLogger IO where

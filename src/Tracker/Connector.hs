@@ -1,4 +1,4 @@
-{-# LANGUAGE NoMonomorphismRestriction, ScopedTypeVariables #-}
+{-# LANGUAGE NoMonomorphismRestriction, ConstraintKinds, ScopedTypeVariables, FlexibleContexts #-}
 
 module Tracker.Connector (makePeers) where
 
@@ -15,23 +15,41 @@ import Data.Either (partitionEithers)
 
 import Control.Concurrent.Async (mapConcurrently)
 import Logger.BasicLogger
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Class
+import Control.Monad.Except
+import qualified Data.Text as T
 
 
-makePeers :: String
-          -> Logger String
-          -> TP.ExceptT String IO ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])
-makePeers tracker log = do
-    torrentContent <- BI.parseFromFile tracker
-    ipsAndPorts    <- getPeers torrentContent log
-    TP.liftEither $ createPeer torrentContent ipsAndPorts log
+
+tryEither e = case e of
+    Left l -> throwError l
+    Right x -> return x
+
+makePeers :: ( MonadLogger m
+             , MonadIO m
+             , MonadError String m)
+          => String
+          ->  m ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])
+makePeers tracker = do
+    logMessage $ T.pack ("Start1 ")
+    torrentContent <-  liftIO $ runExceptT $ BI.parseFromFile tracker
+    logMessage $ T.pack ("Start2 ")
+
+    tc <- tryEither torrentContent
+    logMessage $ T.pack ("Start3 ")
+
+    ipsAndPorts <- getPeers tc
+    logMessage $ T.pack (("Start4 ") ++ (show ipsAndPorts))
+
+    tryEither $ createPeer tc ipsAndPorts
 
 
 createPeer :: BI.BEncode
      -> [(N.HostName, N.PortNumber)]
-     -> Logger String
      -> Either String
               ([P.Peer], TP.SizeInfo, BC.ByteString, [TP.FileInfo])
-createPeer torrentContent ipsAndPorts log = do
+createPeer torrentContent ipsAndPorts = do
     pSize    <- BI.piceSize torrentContent
     fInfos   <- BI.parsePathAndLenLs torrentContent
     infoHash <- BC.pack <$> BI.infoHash torrentContent
@@ -54,19 +72,27 @@ createPeer torrentContent ipsAndPorts log = do
     return (peers, sizeInfo, name, fInfos)
 
 
-getPeers :: BI.BEncode
-         -> Logger String
-         -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
-getPeers torrentContent log = do
-    infoH     <- TP.liftEither $ BI.infoHash torrentContent
-    announces <- TP.liftEither $ makeAnnounces torrentContent
+type UMonadIO = MonadIO
 
-    ls <- TP.liftIO $ mapConcurrently (\x -> run x torrentContent log) announces
+getPeers :: ( MonadLogger m
+            , MonadIO m
+            , MonadError String m)
+         => BI.BEncode
+         -> m [(N.HostName, N.PortNumber)]
+getPeers torrentContent = do
+    let (Right infoH)   = BI.infoHash torrentContent
+        Right announces = makeAnnounces torrentContent
+
+    logMessage $ T.pack ("GP1 ")
+
+    ls <- TP.liftIO $ mapConcurrently (\x -> run x torrentContent ) announces
     let (lefts, rights) = partitionEithers ls
 
-    TP.liftIO $ log ("Tracker Errors "++ (show $ length lefts))
+    logMessage $ T.pack ("Tracker Errors "++ (show $ length lefts) ++ (show lefts))
 
     return $ concat rights
+
+
 
 makeAnnounces :: BI.BEncode
               -> Either String [BI.AnnounceType]
@@ -74,27 +100,25 @@ makeAnnounces torrentContent = do
     announce   <- BI.announce torrentContent
     annouceLst <- BI.announceList torrentContent
 
-    traverse BI.getAnnounce ((annouceLst) )
+    traverse BI.getAnnounce ((announce : annouceLst) )
 
 
 run :: BI.AnnounceType
     -> BI.BEncode
-    -> Logger String
     -> IO (Either String [(N.HostName, N.PortNumber)])
-run a b log = TP.runExceptT $ callTracker a b log
+run a b  = TP.runExceptT $ callTracker a b
 
 callTracker :: BI.AnnounceType
             -> BI.BEncode
-            -> Logger String
             -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
-callTracker aType torrentContent log = do
+callTracker aType torrentContent  = do
     infoH  <- TP.liftEither $ BI.infoHash torrentContent
 
     case aType of
         BI.HTTP tracker -> do
-            TP.liftIO $ log (show tracker)
+    --        TP.liftIO $ print (show tracker)
             HTTP_T.getHostsAndIps tracker infoH torrentContent
 
         BI.UDP tracker -> do
-            TP.liftIO $ log (show tracker)
+        --    TP.liftIO $ log (show tracker)
             UDP_T.getHostsAndIps tracker infoH

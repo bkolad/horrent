@@ -30,7 +30,7 @@ getHostsAndIps tracker infoH torrentContent = do
         Right x ->
             return $ getIPandPort x
         Left msg ->
-            TP.throwError (msg ++ " URL: " ++ url ++ " RSP: " ++rsp)
+            TP.throwError (msg ++ " URL: " ++ url ++ " RSP: " ++rsp ++" "++(show tracker))
 
 
 
