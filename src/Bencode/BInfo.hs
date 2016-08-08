@@ -22,6 +22,8 @@ module Bencode.BInfo
 
 
 
+
+
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Crypto.Hash.SHA1 as SHA1 (hash)
