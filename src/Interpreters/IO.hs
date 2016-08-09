@@ -3,18 +3,6 @@ module Interpreters.IO ( InterpreterEnv (..)
                    , interpret
                    ) where
 
-
-
-
-
-
-
-
-
-
-
-
-
 import Data.Conduit
 --import qualified Data.Conduit.List as CL
 import qualified Peers.Message as M

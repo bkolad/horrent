@@ -22,27 +22,15 @@ import qualified Data.Text as T
 
 
 
-tryEither e = case e of
-    Left l -> throwError l
-    Right x -> return x
-
-makePeers :: ( MonadLogger m
+makePeers :: ( MonadLogger m l
              , MonadIO m
              , MonadError String m)
           => String
           ->  m ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])
 makePeers tracker = do
-    logMessage $ T.pack ("Start1 ")
-    torrentContent <-  liftIO $ runExceptT $ BI.parseFromFile tracker
-    logMessage $ T.pack ("Start2 ")
-
-    tc <- tryEither torrentContent
-    logMessage $ T.pack ("Start3 ")
-
-    ipsAndPorts <- getPeers tc
-    logMessage $ T.pack (("Start4 ") ++ (show ipsAndPorts))
-
-    tryEither $ createPeer tc ipsAndPorts
+    torrentContent <- BI.parseFromFile tracker
+    ipsAndPorts    <- getPeers torrentContent
+    TP.tryEither $ createPeer torrentContent ipsAndPorts
 
 
 createPeer :: BI.BEncode
@@ -74,7 +62,7 @@ createPeer torrentContent ipsAndPorts = do
 
 type UMonadIO = MonadIO
 
-getPeers :: ( MonadLogger m
+getPeers :: ( MonadLogger m l
             , MonadIO m
             , MonadError String m)
          => BI.BEncode
@@ -83,12 +71,14 @@ getPeers torrentContent = do
     let (Right infoH)   = BI.infoHash torrentContent
         Right announces = makeAnnounces torrentContent
 
-    logMessage $ T.pack ("GP1 ")
+    logMessageS ("GP1 ")
 
-    ls <- TP.liftIO $ mapConcurrently (\x -> run x torrentContent ) announces
+    h <- getHandle
+
+    ls <- TP.liftIO $ mapConcurrently (\x -> run h x torrentContent ) announces
     let (lefts, rights) = partitionEithers ls
 
-    logMessage $ T.pack ("Tracker Errors "++ (show $ length lefts) ++ (show lefts))
+    logMessageS ("Tracker Errors "++ (show $ length lefts) ++ (show lefts))
 
     return $ concat rights
 
@@ -103,22 +93,29 @@ makeAnnounces torrentContent = do
     traverse BI.getAnnounce ((announce : annouceLst) )
 
 
-run :: BI.AnnounceType
+run :: Logable l =>
+    l
+    -> BI.AnnounceType
     -> BI.BEncode
     -> IO (Either String [(N.HostName, N.PortNumber)])
-run a b  = TP.runExceptT $ callTracker a b
+run h a b  = runExceptT $ runLogger ( callTracker a b) h
 
-callTracker :: BI.AnnounceType
+
+callTracker ::( MonadLogger m l
+              , MonadIO m
+              , MonadError String m)
+            => BI.AnnounceType
             -> BI.BEncode
-            -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
+            -> m [(N.HostName, N.PortNumber)]
 callTracker aType torrentContent  = do
-    infoH  <- TP.liftEither $ BI.infoHash torrentContent
+    infoH  <- TP.tryEither $ BI.infoHash torrentContent
 
     case aType of
         BI.HTTP tracker -> do
-    --        TP.liftIO $ print (show tracker)
+            logMessageS (show tracker)
             HTTP_T.getHostsAndIps tracker infoH torrentContent
 
         BI.UDP tracker -> do
         --    TP.liftIO $ log (show tracker)
             UDP_T.getHostsAndIps tracker infoH
+--}

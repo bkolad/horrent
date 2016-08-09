@@ -1,3 +1,4 @@
+{-# LANGUAGE NoMonomorphismRestriction, ConstraintKinds, ScopedTypeVariables, FlexibleContexts #-}
 
 module  Tracker.UDPTracker where
 
@@ -21,6 +22,9 @@ import Control.Exception as E
 import Utils (io2ExceptT)
 import Control.Monad (join)
 
+import Control.Monad.IO.Class
+import Control.Monad.Except
+import Logger.BasicLogger
 
 myId = BC.pack "-TR2840-d0p22uiake0b"
 
@@ -160,35 +164,41 @@ sinkAnnResp =
 
 
 -- TODO close socket
-getHostsAndIps :: B.ByteString
+getHostsAndIps :: ( MonadLogger m l
+                  , MonadIO m
+                  , MonadError String m)
+               =>B.ByteString
                -> String
-               -> ExceptT String IO [(N.HostName, N.PortNumber)]--AnnounceRsp
+               -> m [(N.HostName, N.PortNumber)]
 getHostsAndIps tracker infoHash = do
-    (hn, port) <-  TP.liftEither $ BI.parseUDPAnnounce tracker
+    (hn, port) <-  TP.tryEither $ BI.parseUDPAnnounce tracker
 
-    socket <- io2ExceptT $ getSocket (BC.unpack hn) (BC.unpack port)
+    socket <- liftIO $ getSocket (BC.unpack hn) (BC.unpack port)
 
     let sinkSocket   = UDPC.sinkSocket socket
         sourceSocket = UDPC.sourceSocket socket 10000
 
-    io2ExceptT $ sendConnect sinkSocket
+    liftIO $ sendConnect sinkSocket
 
 -- wow!!! wtf!
-    (ConnectMsg conn_id act trans_id) <- join $ io2ExceptT $ TP.liftEither <$> getRespFromTracker sourceSocket
+    kk <- liftIO $ getRespFromTracker sourceSocket
+
+    (ConnectMsg conn_id act trans_id) <- TP.tryEither kk
 
     let announceMsg = mkAnnounce conn_id trans_id (BC.pack infoHash)
 
-    io2ExceptT $ sendAnnounceMsg announceMsg sinkSocket
+    liftIO $ sendAnnounceMsg announceMsg sinkSocket
 
-    aRsp <- io2ExceptT $ sourceSocket $$ sinkAnnResp
+    aRsp <- liftIO $ sourceSocket $$ sinkAnnResp
 
-    io2ExceptT $ N.sClose socket
-    TP.liftEither $ fmap aRhips aRsp
+    liftIO $ N.sClose socket
+    TP.tryEither $ fmap aRhips aRsp
 
     where
         sendConnect sinkSocket =
              yield (BL.toStrict connectMsg) $$ sinkSocket
 
+        getRespFromTracker :: Source IO UDPC.Message -> IO (Either String ConnectMsg)
         getRespFromTracker sourceSocket =
                sourceSocket $$ trackerResp
 

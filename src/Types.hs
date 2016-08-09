@@ -21,6 +21,7 @@ module Types  ( GlobalPiceInfo
               , Perhaps
               , showGlobal
               , getSizeData
+              , tryEither
               ) where
 
 
@@ -85,6 +86,11 @@ data PiceInfo = Done
 type GlobalPiceInfo = TA.TArray Int PiceInfo
 
 type HashInfo = Seq.Seq B.ByteString
+
+
+tryEither e = case e of
+    Left l -> throwError l
+    Right x -> return x
 
 showGlobal :: GlobalPiceInfo -> IO [(Int, PiceInfo)]
 showGlobal global = atomically $ getAssocs global

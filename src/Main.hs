@@ -28,9 +28,6 @@ ubuntu = "/Users/blaze/Torrent/TorrentFiles/ub222.torrent"
 
 
 
-instance MonadError e m => MonadError e (LoggerT BasicLogger m) where
-    throwError = lift . throwError
-    catchError = undefined--Identity.liftCatch catchError
 {-}
 logging :: ( MonadLogger m
            , MonadIO m
