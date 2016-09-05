@@ -26,8 +26,8 @@ data BasicLogger =
 type Logger a = (a -> IO())
 
 
-start :: IO BasicLogger
-start = do
+startLogger :: IO BasicLogger
+startLogger = do
   c <- atomically newTChan
   forkIO (process c)
   return $ BasicLogger c
@@ -131,5 +131,5 @@ xx = do
 
 yy :: IO Int
 yy = do
-    bl <- start
+    bl <- startLogger
     runLogger xx bl

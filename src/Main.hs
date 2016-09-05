@@ -19,7 +19,7 @@ import Control.Monad.Except
 
 
 
-
+main = undefined
 
 torrentDir = "/Users/blaze/Torrent/Downloads/"
 
@@ -39,7 +39,8 @@ logging = do
 --kk :: ( MonadError String m, MonadIO m) => m()
 kk = do
     bl <-  start
-    runExceptT $ runLogger logging bl
+    rr <- runExceptT $ runLogger logging bl
+    print rr
     print "END"
 
     {--case result of

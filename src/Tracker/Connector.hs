@@ -1,4 +1,4 @@
-{-# LANGUAGE NoMonomorphismRestriction, ConstraintKinds, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds, MultiParamTypeClasses, FlexibleContexts,FlexibleInstances,UndecidableInstances, Rank2Types #-}
 
 module Tracker.Connector (makePeers) where
 
@@ -29,9 +29,9 @@ makePeers :: ( MonadLogger m l
           ->  m ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])
 makePeers tracker = do
     torrentContent <- BI.parseFromFile tracker
-    ipsAndPorts    <- getPeers torrentContent
-    TP.tryEither $ createPeer torrentContent ipsAndPorts
-
+--    ipsAndPorts    <- getPeers torrentContent
+--    TP.tryEither $ createPeer torrentContent ipsAndPorts
+    undefined
 
 createPeer :: BI.BEncode
      -> [(N.HostName, N.PortNumber)]
@@ -82,7 +82,55 @@ getPeers torrentContent = do
 
     return $ concat rights
 
+class (MonadLogger m l, MonadIO m, MonadError String m) => MyMonad m l where
+instance (MonadLogger m l, MonadIO m, MonadError String m) => MyMonad m l
+---instance ( MonadLogger m l, MonadIO m, MonadError String m) => MyMonad (m a)
+-- mapConcurrently :: Traversable t => (a -> IO b) -> t a -> IO (t b)
+{-
+mapConcurrentlyL :: ( MonadLogger m l
+                    , MonadIO m
+                    , MonadError String m
+                    , Traversable t)
+                 => (a -> m b) -> t a -> m (t b)
+--}
+mapConcurrentlyL :: MyMonad m l--( MonadLogger m l, MonadIO m, MonadError String m)
+            --        , Traversable t)
+--                 => (forall m1 b1. ( MonadLogger m1 l, MonadIO m1, MonadError String m1) =>a -> m1 b1) -> [a] -> m [b]
+                -- => (forall m1 b1. ( MonadLogger m1 l, MonadIO m1, MonadError String m1) =>a -> m1 b1) -> [a] -> m [b]
+                => (forall m1 b1. (MyMonad m1 l) => a -> m1 b1) -> [a] -> m [b]
 
+mapConcurrentlyL action l = do
+    logMessageS ("GP1 ")
+
+    h <- getHandle
+
+    --let ac :: (Logable l1) => LoggerT l1 (ExceptT String IO) b1
+    let ac = action (head l)
+
+    let io :: IO (Either String b)
+        io = runExceptT $ (runLogger ac h)
+
+    --return [io]
+    undefined
+    --where
+
+
+--rr = undefined
+
+bar :: MonadIO m
+    => m String
+bar = undefined
+
+run2IO :: MonadIO m
+       => (m String)
+       -> m String
+run2IO foo  = liftIO bar
+
+run3IO :: MonadIO m => (forall m1. MonadIO m1 => m1 String) -> m String
+run3IO foo = liftIO foo
+
+
+--kk = run2IO bar
 
 makeAnnounces :: BI.BEncode
               -> Either String [BI.AnnounceType]
@@ -90,7 +138,7 @@ makeAnnounces torrentContent = do
     announce   <- BI.announce torrentContent
     annouceLst <- BI.announceList torrentContent
 
-    traverse BI.getAnnounce ((announce : annouceLst) )
+    traverse BI.getAnnounce (([announce]) )
 
 
 run :: Logable l =>

@@ -167,7 +167,7 @@ sinkAnnResp =
 getHostsAndIps :: ( MonadLogger m l
                   , MonadIO m
                   , MonadError String m)
-               =>B.ByteString
+               => B.ByteString
                -> String
                -> m [(N.HostName, N.PortNumber)]
 getHostsAndIps tracker infoHash = do
@@ -198,7 +198,8 @@ getHostsAndIps tracker infoHash = do
         sendConnect sinkSocket =
              yield (BL.toStrict connectMsg) $$ sinkSocket
 
-        getRespFromTracker :: Source IO UDPC.Message -> IO (Either String ConnectMsg)
+        getRespFromTracker :: Source IO UDPC.Message
+                           -> IO (Either String ConnectMsg)
         getRespFromTracker sourceSocket =
                sourceSocket $$ trackerResp
 

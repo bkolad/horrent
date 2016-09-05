@@ -28,7 +28,7 @@ getHostsAndIps :: ( MonadLogger m l
                   , MonadError String m)
                => BC.ByteString
                -> String
-               ->  BI.BEncode
+               -> BI.BEncode
                -> m [(N.HostName, N.PortNumber)]
 getHostsAndIps tracker infoH torrentContent = do
     url         <- TP.tryEither $ trackerUrl tracker infoH torrentContent
