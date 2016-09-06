@@ -32,10 +32,9 @@ import qualified Data.Sequence as Seq
 import Control.Concurrent.STM
 import Data.Array.MArray
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (liftIO, MonadIO)
 import qualified Network as N
 import Control.Exception (Exception(..))
-
 
 
 data PeerException = PeerException ExeptionType N.HostName (Maybe Int)

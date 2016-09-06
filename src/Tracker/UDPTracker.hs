@@ -25,6 +25,7 @@ import Control.Monad (join)
 import Control.Monad.IO.Class
 import Control.Monad.Except
 import Logger.BasicLogger
+import Horrent
 
 myId = BC.pack "-TR2840-d0p22uiake0b"
 
@@ -164,9 +165,7 @@ sinkAnnResp =
 
 
 -- TODO close socket
-getHostsAndIps :: ( MonadLogger m l
-                  , MonadIO m
-                  , MonadError String m)
+getHostsAndIps :: MonadHorrent m l
                => B.ByteString
                -> String
                -> m [(N.HostName, N.PortNumber)]

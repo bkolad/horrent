@@ -38,7 +38,7 @@ logging = do
 
 --kk :: ( MonadError String m, MonadIO m) => m()
 kk = do
-    bl <-  start
+    bl <- startLogger
     rr <- runExceptT $ runLogger logging bl
     print rr
     print "END"

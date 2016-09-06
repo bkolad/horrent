@@ -19,13 +19,12 @@ import Utils (io2ExceptT)
 import Control.Monad.IO.Class
 import Control.Monad.Except
 import Logger.BasicLogger
+import Horrent
 
 
 
 
-getHostsAndIps :: ( MonadLogger m l
-                  , MonadIO m
-                  , MonadError String m)
+getHostsAndIps :: MonadHorrent m l
                => BC.ByteString
                -> String
                -> BI.BEncode
@@ -49,7 +48,10 @@ getResponseFromTracker url =
     >>= HTTP.getResponseBody
 
 
-trackerUrl :: BC.ByteString -> String ->  BI.BEncode -> Either String String
+trackerUrl :: BC.ByteString
+           -> String
+           -> BI.BEncode
+           -> Either String String
 trackerUrl ann infoHash romDic = do
     let vars = encodedVars infoHash
     return $ BC.unpack ann ++ "?" ++ vars

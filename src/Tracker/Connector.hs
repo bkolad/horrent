@@ -19,24 +19,23 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Except
 import qualified Data.Text as T
+import Horrent
 
 
 
-makePeers :: ( MonadLogger m l
-             , MonadIO m
-             , MonadError String m)
+makePeers :: MonadHorrent m l
           => String
           ->  m ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])
 makePeers tracker = do
     torrentContent <- BI.parseFromFile tracker
---    ipsAndPorts    <- getPeers torrentContent
---    TP.tryEither $ createPeer torrentContent ipsAndPorts
-    undefined
+    ipsAndPorts    <- getPeers torrentContent
+    TP.tryEither $ createPeer torrentContent ipsAndPorts
+
 
 createPeer :: BI.BEncode
-     -> [(N.HostName, N.PortNumber)]
-     -> Either String
-              ([P.Peer], TP.SizeInfo, BC.ByteString, [TP.FileInfo])
+           -> [(N.HostName, N.PortNumber)]
+           -> Either String
+                    ([P.Peer], TP.SizeInfo, BC.ByteString, [TP.FileInfo])
 createPeer torrentContent ipsAndPorts = do
     pSize    <- BI.piceSize torrentContent
     fInfos   <- BI.parsePathAndLenLs torrentContent
@@ -62,9 +61,7 @@ createPeer torrentContent ipsAndPorts = do
 
 type UMonadIO = MonadIO
 
-getPeers :: ( MonadLogger m l
-            , MonadIO m
-            , MonadError String m)
+getPeers :: MonadHorrent m l
          => BI.BEncode
          -> m [(N.HostName, N.PortNumber)]
 getPeers torrentContent = do
@@ -73,49 +70,61 @@ getPeers torrentContent = do
 
     logMessageS ("GP1 ")
 
-    h <- getHandle
-
-    ls <- TP.liftIO $ mapConcurrently (\x -> run h x torrentContent ) announces
+    ls <- mapConcUnliftIO (callTracker torrentContent) announces
     let (lefts, rights) = partitionEithers ls
 
     logMessageS ("Tracker Errors "++ (show $ length lefts) ++ (show lefts))
 
     return $ concat rights
 
-class (MonadLogger m l, MonadIO m, MonadError String m) => MyMonad m l where
-instance (MonadLogger m l, MonadIO m, MonadError String m) => MyMonad m l
----instance ( MonadLogger m l, MonadIO m, MonadError String m) => MyMonad (m a)
--- mapConcurrently :: Traversable t => (a -> IO b) -> t a -> IO (t b)
-{-
-mapConcurrentlyL :: ( MonadLogger m l
-                    , MonadIO m
-                    , MonadError String m
-                    , Traversable t)
-                 => (a -> m b) -> t a -> m (t b)
---}
-mapConcurrentlyL :: MyMonad m l--( MonadLogger m l, MonadIO m, MonadError String m)
-            --        , Traversable t)
---                 => (forall m1 b1. ( MonadLogger m1 l, MonadIO m1, MonadError String m1) =>a -> m1 b1) -> [a] -> m [b]
-                -- => (forall m1 b1. ( MonadLogger m1 l, MonadIO m1, MonadError String m1) =>a -> m1 b1) -> [a] -> m [b]
-                => (forall m1 b1. (MyMonad m1 l) => a -> m1 b1) -> [a] -> m [b]
 
-mapConcurrentlyL action l = do
-    logMessageS ("GP1 ")
-
+mapConcUnliftIO :: MonadHorrent m l
+                    => (forall m1. (MonadHorrent m1 l)
+                            => a
+                            -> m1 [b])
+                    -> [a]
+                    -> m [Either String [b]]
+mapConcUnliftIO action ls = do
     h <- getHandle
-
-    --let ac :: (Logable l1) => LoggerT l1 (ExceptT String IO) b1
-    let ac = action (head l)
-
-    let io :: IO (Either String b)
-        io = runExceptT $ (runLogger ac h)
-
-    --return [io]
-    undefined
-    --where
+    let run x = runExceptT $ (runLogger (action x) h)
+    TP.liftIO $ mapConcurrently run ls
 
 
---rr = undefined
+makeAnnounces :: BI.BEncode
+              -> Either String [BI.AnnounceType]
+makeAnnounces torrentContent = do
+    announce   <- BI.announce torrentContent
+    annouceLst <- BI.announceList torrentContent
+
+    traverse BI.getAnnounce (([announce]) )
+
+callTracker :: MonadHorrent m l
+            => BI.BEncode
+            -> BI.AnnounceType
+            -> m [(N.HostName, N.PortNumber)]
+callTracker torrentContent aType  = do
+    infoH  <- TP.tryEither $ BI.infoHash torrentContent
+
+    case aType of
+        BI.HTTP tracker -> do
+            logMessageS (show tracker)
+            HTTP_T.getHostsAndIps tracker infoH torrentContent
+
+        BI.UDP tracker -> do
+        --    TP.liftIO $ log (show tracker)
+            UDP_T.getHostsAndIps tracker infoH
+--}
+
+
+
+{--
+run :: Logable l =>
+    l
+    -> BI.AnnounceType
+    -> BI.BEncode
+    -> IO (Either String [(N.HostName, N.PortNumber)])
+run h a b  = runExceptT $ runLogger ( callTracker a b) h
+--}
 
 bar :: MonadIO m
     => m String
@@ -131,39 +140,3 @@ run3IO foo = liftIO foo
 
 
 --kk = run2IO bar
-
-makeAnnounces :: BI.BEncode
-              -> Either String [BI.AnnounceType]
-makeAnnounces torrentContent = do
-    announce   <- BI.announce torrentContent
-    annouceLst <- BI.announceList torrentContent
-
-    traverse BI.getAnnounce (([announce]) )
-
-
-run :: Logable l =>
-    l
-    -> BI.AnnounceType
-    -> BI.BEncode
-    -> IO (Either String [(N.HostName, N.PortNumber)])
-run h a b  = runExceptT $ runLogger ( callTracker a b) h
-
-
-callTracker ::( MonadLogger m l
-              , MonadIO m
-              , MonadError String m)
-            => BI.AnnounceType
-            -> BI.BEncode
-            -> m [(N.HostName, N.PortNumber)]
-callTracker aType torrentContent  = do
-    infoH  <- TP.tryEither $ BI.infoHash torrentContent
-
-    case aType of
-        BI.HTTP tracker -> do
-            logMessageS (show tracker)
-            HTTP_T.getHostsAndIps tracker infoH torrentContent
-
-        BI.UDP tracker -> do
-        --    TP.liftIO $ log (show tracker)
-            UDP_T.getHostsAndIps tracker infoH
---}
