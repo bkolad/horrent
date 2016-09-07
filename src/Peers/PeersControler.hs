@@ -18,12 +18,12 @@ import Control.Exception
 import qualified Data.Array.MArray as MA
 import qualified Control.Concurrent.STM as STM
 import Logger.BasicLogger --(MonadLogger)
+import Horrent
 
 
 import  Control.Monad.Reader (runReaderT, lift, unless)
 
-start :: ( MonadIO m
-         , MonadLogger m l)
+start :: MonadHorrent m l
       => [P.Peer]
       -> TP.SizeInfo
       -> String

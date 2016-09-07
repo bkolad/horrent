@@ -15,62 +15,32 @@ import Logger.BasicLogger
 import Control.Monad.IO.Class
 
 import Control.Monad.Except
---import
 
 
 
-main = undefined
 
 torrentDir = "/Users/blaze/Torrent/Downloads/"
 
 torrent = "/Users/blaze/Torrent/TorrentFiles/MOS2.torrent"
 ubuntu = "/Users/blaze/Torrent/TorrentFiles/ub222.torrent"
 
-
-
-{-}
-logging :: ( MonadLogger m
-           , MonadIO m
-           , MonadError String m) => m  ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])--}
-logging = do
-    result <- (CN.makePeers ubuntu)
-    return result
-
---kk :: ( MonadError String m, MonadIO m) => m()
-kk = do
-    bl <- startLogger
-    rr <- runExceptT $ runLogger logging bl
-    print rr
-    print "END"
-
-    {--case result of
-        Left str -> logMessage $ T.pack str
+main = do
+    logger <- startLogger
+    let lpee = CN.makePeers ubuntu
+    result <- runExceptT $ runLogger lpee logger
+    case result of
+        Left str -> print $ T.pack str
         Right (peers, sizeInfo, torrentName, fInfos) -> do
             let parentDir    = torrentDir ++  ubuntu
                 downloadsDir = parentDir ++ "/Parts/"
                 filesDir     = parentDir ++ "/Files/"
-            return ()--}
-
-{--
-            log $ "Peers " ++  (show (length peers))
-
-            liftIO $ Dir.createDirectoryIfMissing True downloadsDir
-            liftIO $ Dir.createDirectoryIfMissing True filesDir
-
-            (problems, missing) <- liftIO $ PC.start peers sizeInfo downloadsDir undefined
-
-            log $  (show missing)
-            case missing of
-            --    [] ->
-            --        liftIO $ FS.concatFiles fInfos downloadsDir filesDir
-                ms -> do
-                    log $ show problems
-                    log $ show ms
---}
-
-
-{--
-main :: IO()
-main = do
-    bl <- start
-    runLogger logging bl--}
+                controller = PC.start peers sizeInfo downloadsDir
+            r <- runExceptT $ runLogger controller logger
+            case r of
+                Left x -> print x
+                Right (problems, missing) -> do
+                    case missing of
+                        [] -> FS.concatFiles fInfos downloadsDir filesDir
+                        ms -> do
+                            print $ show problems
+                            print $ show ms
