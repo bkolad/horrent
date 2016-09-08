@@ -45,6 +45,7 @@ data ExeptionType = TimeOutException
                    | PacketParseException
                    | MsgNotSupportedException
                    | ChokeException
+                   | HandShakeException
                    deriving Show
 
 

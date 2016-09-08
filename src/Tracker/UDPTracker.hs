@@ -165,7 +165,7 @@ sinkAnnResp =
 
 
 -- TODO close socket
-getHostsAndIps :: MonadHorrent m l
+getHostsAndIps :: MonadHorrent m l String
                => B.ByteString
                -> String
                -> m [(N.HostName, N.PortNumber)]

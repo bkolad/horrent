@@ -24,7 +24,7 @@ import Horrent
 
 
 
-getHostsAndIps :: MonadHorrent m l
+getHostsAndIps :: MonadHorrent m l String
                => BC.ByteString
                -> String
                -> BI.BEncode
