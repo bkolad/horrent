@@ -2,9 +2,12 @@
            , MultiParamTypeClasses
            , FunctionalDependencies
            , FlexibleInstances
-           , FlexibleContexts #-}
+           , FlexibleContexts
+           , UndecidableInstances
+           , AllowAmbiguousTypes
+           #-}
 
-module Logger.BasicLogger where
+module Logger.BasicLogger  where
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T (putStrLn)
@@ -15,15 +18,18 @@ import Control.Monad (forever)
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Writer.Class
+import Control.Monad.Except
+
+
 
 data BasicLogger =
-    BasicLogger { unlogger :: TChan T.Text }
+    BasicLogger { runBasicLogger :: TChan T.Text }
 
 type Logger a = (a -> IO())
 
 
-start :: IO BasicLogger
-start = do
+startLogger :: IO BasicLogger
+startLogger = do
   c <- atomically newTChan
   forkIO (process c)
   return $ BasicLogger c
@@ -37,7 +43,7 @@ logString l msg = logMsg l (T.pack msg)
 process :: TChan T.Text -> IO ()
 process chan = forever $ do
     l <- atomically $ readTChan chan
-    T.putStrLn "BL!!!!!!"
+--    T.putStrLn "BL!!!!!!"
     T.putStrLn l
 
 
@@ -45,18 +51,18 @@ process chan = forever $ do
 data LoggerT h m a = L { runLogger:: h -> m a }
 
 
-instance (Monad m) => Functor (LoggerT h m) where
+instance (Monad m) => Functor (LoggerT l m) where
     fmap f (L fun) = L $
       \h -> do x <- fun h
                return $ f x
 
 
-instance (Monad m) => Applicative (LoggerT h m) where
+instance (Monad m) => Applicative (LoggerT l m) where
     pure x = L $ \h -> return x
     (L fo) <*> (L x) = L $ \h -> (fo h) <*> (x h)
 
 
-instance (Monad m) => Monad (LoggerT h m) where
+instance (Monad m) => Monad (LoggerT l m) where
     return = pure
     (L x) >>= fx = L $ \h ->
         do k <- (x h)
@@ -65,41 +71,59 @@ instance (Monad m) => Monad (LoggerT h m) where
 
 
 
-class Logable a where
-   logM :: a -> T.Text -> IO ()
 
 
-class (Monad m) => MonadLogger m where
+class (Logable l, Monad m) => MonadLogger m l | m -> l where
     logMessage :: T.Text -> m ()
+
+    logMessageS :: String -> m ()
+    logMessageS s = logMessage $ T.pack s
+
+    getHandle :: m l
+
+
+class Logable a  where
+   logM :: a -> T.Text -> IO ()
+   handleM :: a -> IO a
+   handleM = return
 
 
 instance (Logable l) => MonadTrans (LoggerT l) where
     lift m = L $ \h -> m
 
+lift2Logger h m = L $ \h -> m
 
 instance (Logable l, MonadIO m) => MonadIO (LoggerT l m) where
     liftIO = lift . liftIO
 
 
-instance (Logable l, MonadIO m) => MonadLogger (LoggerT l m) where
+instance (Logable l, MonadIO m) => MonadLogger (LoggerT l m) l  where
     logMessage x = L $ \h -> liftIO $ logM h x
+    getHandle = L $ \h -> liftIO $ return h
 
 
-instance MonadLogger IO where
-    logMessage x = T.putStrLn x
+
+
+--instance MonadLogger IO where
+--    logMessage x = T.putStrLn x
 
 
 -- =================
 
 instance Logable BasicLogger where
     logM = logMsg
-
+    --handleM x = return x
 
 
 -- ===============
 
 
-xx :: (MonadIO m, MonadLogger m) => m Int
+instance (Logable l, MonadError e m) => MonadError e (LoggerT l m) where
+    throwError = lift . throwError
+    catchError = undefined--Identity.liftCatch catchError
+
+
+xx :: (MonadIO m, MonadLogger m h) => m Int
 xx = do
     liftIO $ print "lalal"
     logMessage "oooouuuu"
@@ -109,5 +133,5 @@ xx = do
 
 yy :: IO Int
 yy = do
-    bl <- start
+    bl <- startLogger
     runLogger xx bl
