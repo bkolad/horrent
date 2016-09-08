@@ -1,3 +1,5 @@
+{-# LANGUAGE NoMonomorphismRestriction, ConstraintKinds, ScopedTypeVariables, FlexibleContexts #-}
+
 module Tracker.HTTPTracker where
 
 import qualified Tracker.UrlEncoder as Encoder (urlEncodeVars)
@@ -14,23 +16,29 @@ import Network.HTTP.Base (urlEncodeVars)
 import Network.HTTP as HTTP
 import Data.Binary.Get
 import Utils (io2ExceptT)
+import Control.Monad.IO.Class
+import Control.Monad.Except
+import Logger.BasicLogger
+import Horrent
 
 
 
-getHostsAndIps :: BC.ByteString
+
+getHostsAndIps :: MonadHorrent m l
+               => BC.ByteString
                -> String
-               ->  BI.BEncode
-               -> TP.ExceptT String IO [(N.HostName, N.PortNumber)]
+               -> BI.BEncode
+               -> m [(N.HostName, N.PortNumber)]
 getHostsAndIps tracker infoH torrentContent = do
-    url         <- TP.liftEither $ trackerUrl tracker infoH torrentContent
-    rsp         <- io2ExceptT $ getResponseFromTracker url
-    parsedResp  <- TP.liftEither $ BI.parse2BEncode . BC.pack $ rsp
+    url         <- TP.tryEither $ trackerUrl tracker infoH torrentContent
+    rsp         <- liftIO $ getResponseFromTracker url
+    parsedResp  <- TP.tryEither $ BI.parse2BEncode . BC.pack $ rsp
     let peersBS = BI.peers parsedResp
     case peersBS of
         Right x ->
             return $ getIPandPort x
         Left msg ->
-            TP.throwError (msg ++ " URL: " ++ url ++ " RSP: " ++rsp)
+            TP.throwError (msg ++ " URL: " ++ url ++ " RSP: " ++rsp ++" "++(show tracker))
 
 
 
@@ -40,7 +48,10 @@ getResponseFromTracker url =
     >>= HTTP.getResponseBody
 
 
-trackerUrl :: BC.ByteString -> String ->  BI.BEncode -> Either String String
+trackerUrl :: BC.ByteString
+           -> String
+           -> BI.BEncode
+           -> Either String String
 trackerUrl ann infoHash romDic = do
     let vars = encodedVars infoHash
     return $ BC.unpack ann ++ "?" ++ vars

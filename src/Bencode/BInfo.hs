@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, FlexibleContexts #-}
 
 module Bencode.BInfo
     ( BP.BEncode
@@ -19,6 +19,11 @@ module Bencode.BInfo
     , BP.parseUDPAnnounce) where
 
 
+
+
+
+
+
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Crypto.Hash.SHA1 as SHA1 (hash)
@@ -27,6 +32,10 @@ import qualified Bencode.BParser as BP
 import qualified Data.Map as Map
 import Data.Maybe (isJust)
 import Control.Monad (join)
+import Control.Monad.Except
+import qualified Types as TP
+
+
 
 import Types as TP
 import Control.Lens
@@ -136,9 +145,14 @@ multiFiles dic = do
     maybe (Left "Wrong multi-files section in infodic") Right fs
 
 
-parseFromFile :: String ->  ExceptT String IO BP.BEncode
+--parseFromFile :: String ->  ExceptT String IO BP.BEncode
+
+parseFromFile :: (MonadIO m, MonadError String m)
+              => String
+              ->  m BP.BEncode
 parseFromFile path = do content <- liftIO $ B.readFile path
-                        liftEither $ BP.parse2BEncode content
+                        TP.tryEither $ BP.parse2BEncode content
+
 
 
 data AnnounceType = HTTP  BC.ByteString | UDP  BC.ByteString
