@@ -1,4 +1,5 @@
 
+{-# LANGUAGE FlexibleContexts #-}
 module Peers.PeersControler (start) where
 
 import qualified Peers.Peer as P
@@ -15,6 +16,8 @@ import Control.Monad.IO.Class (MonadIO (liftIO))
 import Interpreters.Action
 import Control.Monad (join)
 import Control.Exception
+import Control.Monad.Except
+
 import qualified Data.Array.MArray as MA
 import qualified Control.Concurrent.STM as STM
 import Logger.BasicLogger --(MonadLogger)
@@ -23,7 +26,7 @@ import Horrent
 
 import  Control.Monad.Reader (runReaderT, lift, unless)
 
-start :: MonadHorrent m l
+start :: MonadHorrent m l String
       => [P.Peer]
       -> TP.SizeInfo
       -> String
@@ -32,7 +35,8 @@ start peers sizeInfo downloadsDir = do
 
     globalStatus <- liftIO $ makeGlobal sizeInfo
     qu           <- liftIO $ SQ.makeQueueFromList peers
-    lStat        <- liftIO $ download downloadsDir 500 qu globalStatus sizeInfo
+    h <- getHandle
+    lStat        <- liftIO $ download h downloadsDir 500 qu globalStatus sizeInfo
     let problems = filter (OK /=) $ join lStat
     missing      <- liftIO $ missingPieces globalStatus
     return (problems, missing)
@@ -41,8 +45,8 @@ start peers sizeInfo downloadsDir = do
         makeGlobal sizeInfo =
             TP.newGlobalBitField $ TP.numberOfPieces sizeInfo
 
-        download dir pN qu globalStatus sizeInfo = do
-            let run = SQ.loop qu (runClientSafe dir globalStatus sizeInfo) []
+        download l dir pN qu globalStatus sizeInfo = do
+            let run = SQ.loop qu (runClientSafe l dir globalStatus sizeInfo) []
             SQ.spawnNThreadsAndWait pN run
 
         missingPieces globalStatus = do
@@ -57,16 +61,29 @@ data PeerStatus = OK
     deriving (Show, Eq)
 
 
-runClientSafe :: String
+runClientSafe :: Logable l
+              => l
+              -> String
               -> TP.GlobalPiceInfo
               -> TP.SizeInfo
               -> P.Peer
               -> IO PeerStatus
-runClientSafe dir globalStatus sizeInfo peer =
+runClientSafe l dir globalStatus sizeInfo peer = do
+    ex <- runClient l dir globalStatus sizeInfo peer
+    case ex of
+        Left (TP.PeerException e host iM) ->
+            case iM of
+                Nothing ->
+                    return (TubeError host iM)
+                Just x -> do
+                    setStatusNotHave x globalStatus
+                    return (TubeError host iM)
+
+{--
     catches (runClient dir globalStatus sizeInfo peer)
           [ tubeExceptionHandler globalStatus
           , ioExceptionHandler peer ]
-
+--}
 
 tubeExceptionHandler globalStatus =
     Handler handle
@@ -92,12 +109,14 @@ setStatusNotHave x global =
     STM.atomically $ MA.writeArray global x TP.NotHave
 
 
-runClient :: String
+runClient ::  Logable l
+          =>  l
+          -> String
           -> TP.GlobalPiceInfo
           -> TP.SizeInfo
           -> P.Peer
-          -> IO PeerStatus
-runClient dir globalStatus sizeInfo peer = C.runTCPClient
+          -> IO (Either TP.PeerException PeerStatus)
+runClient l dir globalStatus sizeInfo peer =   C.runTCPClient
     (C.clientSettings (P.port peer) (BC.pack $ P.hostName peer))
         $ \appData -> do
 
@@ -116,7 +135,7 @@ runClient dir globalStatus sizeInfo peer = C.runTCPClient
                                           , IPIO.host     = P.hostName peer
                                           }
 
-            runReaderT (IPIO.interpret action) env
+            runLogger (runExceptT (runReaderT (IPIO.interpret action) env)) l
 
 
 setStatusTimetOut :: Int

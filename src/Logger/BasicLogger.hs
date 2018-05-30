@@ -25,7 +25,6 @@ import Control.Monad.Except
 data BasicLogger =
     BasicLogger { runBasicLogger :: TChan T.Text }
 
-type Logger a = (a -> IO())
 
 
 startLogger :: IO BasicLogger
@@ -89,7 +88,7 @@ class Logable a  where
 
 
 instance (Logable l) => MonadTrans (LoggerT l) where
-    lift m = L $ \h -> m
+    lift x = L $ \h -> x
 
 lift2Logger h m = L $ \h -> m
 
@@ -101,6 +100,9 @@ instance (Logable l, MonadIO m) => MonadLogger (LoggerT l m) l  where
     logMessage x = L $ \h -> liftIO $ logM h x
     getHandle = L $ \h -> liftIO $ return h
 
+instance (Logable l, MonadIO m, MonadLogger m l) => MonadLogger (ExceptT e m) l where
+    logMessage  =  logMessage
+    getHandle = getHandle
 
 
 
@@ -120,10 +122,10 @@ instance Logable BasicLogger where
 
 instance (Logable l, MonadError e m) => MonadError e (LoggerT l m) where
     throwError = lift . throwError
-    catchError = undefined--Identity.liftCatch catchError
+    catchError =  undefined--Identity.liftCatch catchError
 
 
-xx :: (MonadIO m, MonadLogger m h) => m Int
+xx :: (MonadIO m, MonadLogger m l) => m Int
 xx = do
     liftIO $ print "lalal"
     logMessage "oooouuuu"

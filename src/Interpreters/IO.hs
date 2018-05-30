@@ -15,8 +15,9 @@ import qualified System.Timeout as TOUT
 import qualified Data.Streaming.Network as SN
 import qualified Data.Conduit.Binary as CB
 import qualified Control.Monad.Trans.Resource as R
-import Control.Exception (SomeException, throw, catch)
+import Control.Exception (Exception, SomeException, IOException, throw, catch, try)
 import Control.Monad.Reader (ReaderT, ask, local)
+import Horrent
 
 
 import Interpreters.Action
@@ -30,8 +31,9 @@ data InterpreterEnv =
                    , host     :: String
                    }
 
-interpret :: Action a
-          -> ReaderT InterpreterEnv IO a -- ExceptT remembrt order of the monad stack
+interpret :: MonadHorrent m l TP.PeerException
+          => Action a
+          -> ReaderT InterpreterEnv m a -- ExceptT remembrt order of the monad stack
 interpret program =                     -- ExceoT ReaderT blbla -> newtype read about freer
     case program of
         Free (SendInterested c) -> do
@@ -56,8 +58,11 @@ interpret program =                     -- ExceoT ReaderT blbla -> newtype read 
                 exception =
                      makeException TP.NetworkException hostName (Just pend)
 
-            TP.liftIO $ catch (sendRequest pSink req)
-                           (\(e :: SomeException) -> throw exception)
+        --    TP.liftIO $ catch (sendRequest pSink req)
+        --                      (\(e :: SomeException) -> TP.throwError "exception")
+
+            e <- TP.liftIO $ try (sendRequest pSink req)
+            TP.tryEither e
 
             local ( \ env -> env {pending = Just pend}) (interpret c)
 
@@ -80,16 +85,21 @@ interpret program =                     -- ExceoT ReaderT blbla -> newtype read 
             let networkExcpetion =
                     makeException TP.NetworkException hostName mPending
 
-            mTOut <- TP.liftIO $ catch
-                         (TOUT.timeout t (SN.appRead aData))
-                         (\(e :: SomeException) -> throw networkExcpetion)
+            --mTOut <- TP.liftIO $ catch
+            --             (TOUT.timeout t (SN.appRead aData))
+            --             (\(e :: SomeException) -> TP.throwError networkExcpetion)
+
+
+            mTOut1 <- TP.liftIO $ try (TOUT.timeout t (SN.appRead aData))
+
+            mTOut <- TP.tryEither mTOut1
 
             let timeOutException =
                     makeException TP.TimeOutException hostName mPending
 
             maybe (throw timeOutException)
                   (interpret . fun)
-                  mTOut
+                  (mTOut)
 
 
         Free (SaveToFile fN content c) -> do

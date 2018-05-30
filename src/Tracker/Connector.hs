@@ -23,7 +23,7 @@ import Horrent
 
 
 
-makePeers :: MonadHorrent m l
+makePeers :: MonadHorrent m l String
           => String
           ->  m ([P.Peer], TP.SizeInfo, B.ByteString, [TP.FileInfo])
 makePeers tracker = do
@@ -61,7 +61,7 @@ createPeer torrentContent ipsAndPorts = do
 
 type UMonadIO = MonadIO
 
-getPeers :: MonadHorrent m l
+getPeers :: MonadHorrent m l String
          => BI.BEncode
          -> m [(N.HostName, N.PortNumber)]
 getPeers torrentContent = do
@@ -74,12 +74,13 @@ getPeers torrentContent = do
     let (lefts, rights) = partitionEithers ls
 
     logMessageS ("Tracker Errors "++ (show $ length lefts) ++ (show lefts))
+--    logMessageS $ show rights
 
     return $ concat rights
 
 
-mapConcUnliftIO :: MonadHorrent m l
-                    => (forall m1. (MonadHorrent m1 l)
+mapConcUnliftIO :: MonadHorrent m l String
+                    => (forall m1. (MonadHorrent m1 l String)
                             => a
                             -> m1 [b])
                     -> [a]
@@ -98,7 +99,7 @@ makeAnnounces torrentContent = do
 
     traverse BI.getAnnounce (([announce]) )
 
-callTracker :: MonadHorrent m l
+callTracker :: MonadHorrent m l String
             => BI.BEncode
             -> BI.AnnounceType
             -> m [(N.HostName, N.PortNumber)]
